@@ -9,6 +9,15 @@ pub fn run() {
     use tauri::Manager;
 
     #[tauri::command]
+    fn updater_enabled() -> bool {
+        cfg!(target_os = "windows")
+            && !option_env!("QUIET_UPDATER_PUBLIC_KEY")
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+    }
+
+    #[tauri::command]
     fn load_workspace(
         database: tauri::State<'_, Mutex<Database>>,
     ) -> Result<Option<Workspace>, String> {
@@ -27,6 +36,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(option_env!("QUIET_UPDATER_PUBLIC_KEY").unwrap_or("").trim())
+                .build(),
+        )
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
@@ -35,7 +49,11 @@ pub fn run() {
             app.manage(Mutex::new(database));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_workspace, save_workspace])
+        .invoke_handler(tauri::generate_handler![
+            load_workspace,
+            save_workspace,
+            updater_enabled
+        ])
         .run(tauri::generate_context!())
         .expect("Could not start Quiet Workspace");
 }

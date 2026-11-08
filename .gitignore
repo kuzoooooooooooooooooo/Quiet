@@ -11,3 +11,7 @@ playwright-report/
 .DS_Store
 *.tsbuildinfo
 src-tauri/gen/
+
+# Never commit updater signing material.
+*.key
+*.key.pub

@@ -2,6 +2,23 @@ import { useSyncExternalStore } from 'react';
 
 // Source-language keys keep this small catalog readable without a runtime dependency.
 const english = {
+  Оновлення: 'Updates',
+  'Оновлення доступні у Windows-додатку.': 'Updates are available in the Windows app.',
+  'Ця збірка не налаштована для оновлень.': 'This build is not configured for updates.',
+  'Перевіряємо оновлення…': 'Checking for updates…',
+  'Завантажуємо оновлення…': 'Downloading update…',
+  'Зберігаємо зміни та встановлюємо оновлення…': 'Saving changes and installing the update…',
+  'Оновлення встановлено. Запусти Quiet знову.': 'Update installed. Open Quiet again.',
+  'Не вдалося завершити оновлення. Спробуй знову.': 'Could not complete the update. Try again.',
+  'Встановлено найновішу версію.': 'You have the latest version.',
+  'Доступна версія {version}.': 'Version {version} is available.',
+  'Перевіряй і встановлюй нові версії тут.': 'Check for and install new versions here.',
+  'Після збереження змін додаток перезапуститься.':
+    'The app will restart after saving your changes.',
+  'Завантажити та встановити': 'Download and install',
+  'Перевірити оновлення': 'Check for updates',
+  'Відкласти оновлення': 'Dismiss update',
+  Деталі: 'Details',
   'Згорнути панель': 'Collapse sidebar',
   'Розгорнути панель': 'Expand sidebar',
   'Згорнути / розгорнути бічну панель': 'Toggle sidebar',

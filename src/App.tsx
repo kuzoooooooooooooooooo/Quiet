@@ -24,6 +24,8 @@ import type {
 import { downloadBlob, isDesktop, loadWorkspace, openExternal, saveWorkspace } from './storage';
 import { useTheme } from './theme';
 import type { Theme } from './theme';
+import { useUpdater } from './useUpdater';
+import UpdateSettings from './UpdateSettings';
 
 const Markdown = lazy(() => import('./Markdown'));
 const shortcutKey = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl';
@@ -75,11 +77,13 @@ function Modal({
   onClose,
   children,
   wide = false,
+  locked = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  locked?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -119,9 +123,11 @@ function Modal({
     >
       <div className="modal-heading">
         <h2>{title}</h2>
-        <button className="icon-button" aria-label={t('Закрити')} onClick={onClose}>
-          <Icon name="close" />
-        </button>
+        {!locked && (
+          <button className="icon-button" aria-label={t('Закрити')} onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        )}
       </div>
       {children}
     </dialog>
@@ -430,7 +436,11 @@ export default function App() {
   const { language, selectLanguage } = useLanguage();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loadError, setLoadError] = useState('');
-  const [status, setStatus] = useState<SaveStatus>('saved');
+  const [writeStatus, setStatus] = useState<SaveStatus>('saved');
+  const [persistedWorkspace, setPersistedWorkspace] = useState<Workspace | null>(null);
+  // A new render cannot claim to be saved before its persistence effect starts.
+  const status: SaveStatus =
+    writeStatus === 'saved' && workspace !== persistedWorkspace ? 'saving' : writeStatus;
   const [saveError, setSaveError] = useState('');
   const [modal, setModal] = useState<ModalState>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -446,6 +456,15 @@ export default function App() {
   const taskInput = useRef<HTMLInputElement>(null);
   const documentTitle = useRef<HTMLInputElement>(null);
   const latestSave = useRef<Promise<void>>(Promise.resolve());
+  const updater = useUpdater(!!workspace, async () => {
+    let operation: Promise<void>;
+    do {
+      operation = latestSave.current;
+      await operation;
+    } while (operation !== latestSave.current);
+  });
+  const updateInstalling = useRef(false);
+  updateInstalling.current = updater.phase === 'installing';
   const update = useCallback(
     (transform: (current: Workspace) => Workspace) =>
       setWorkspace((current) => (current ? transform(current) : current)),
@@ -475,6 +494,7 @@ export default function App() {
     operation
       .then(() => {
         if (live) {
+          setPersistedWorkspace(workspace);
           setStatus('saved');
           setSaveError('');
         }
@@ -499,6 +519,7 @@ export default function App() {
         const currentWindow = getCurrentWindow();
         const unlisten = await currentWindow.onCloseRequested(async (event) => {
           event.preventDefault();
+          if (updateInstalling.current) return;
           try {
             await latestSave.current;
             await currentWindow.destroy();
@@ -529,6 +550,7 @@ export default function App() {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (updateInstalling.current) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         if (!modal) setSearchOpen((open) => !open);
@@ -1692,6 +1714,28 @@ export default function App() {
             <span>{t('Клавіатурні скорочення')}</span>
             <Icon name="chevron" size={15} />
           </button>
+          <UpdateSettings updater={updater} />
+        </Modal>
+      )}
+      {updater.showNotice && !modal && (
+        <div className="update-notice" role="status">
+          <button onClick={() => setModal({ type: 'settings' })}>
+            {t('Доступна версія {version}.', { version: updater.version })}
+          </button>
+          <button
+            className="icon-button"
+            aria-label={t('Відкласти оновлення')}
+            onClick={updater.dismiss}
+          >
+            <Icon name="close" size={15} />
+          </button>
+        </div>
+      )}
+      {updater.phase === 'installing' && (
+        <Modal title={t('Оновлення')} onClose={() => undefined} locked>
+          <p className="modal-description" role="status">
+            {t('Зберігаємо зміни та встановлюємо оновлення…')}
+          </p>
         </Modal>
       )}
       {modal?.type === 'backup' && (

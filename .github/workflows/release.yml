@@ -1,0 +1,63 @@
+name: Release Windows
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      QUIET_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate release configuration
+        run: node scripts/release.mjs preflight '${{ github.ref_name }}'
+      - name: Protect published releases
+        shell: pwsh
+        run: |
+          $release = gh release view '${{ github.ref_name }}' --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0 -and !(($release | ConvertFrom-Json).isDraft)) {
+            throw 'This version is already published. Bump the version and create a new tag.'
+          }
+          $global:LASTEXITCODE = 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run test:release
+      - name: Build signed installer and draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Quiet ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+          generateReleaseNotes: true
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --features desktop,custom-protocol --bundles nsis --config src-tauri/tauri.release.conf.json -- --locked
+      - name: Verify uploaded update assets
+        run: |
+          gh release download '${{ github.ref_name }}' --dir release-check --pattern 'latest.json' --pattern '*.exe' --pattern '*.sig'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the release assets for verification.' }
+          node scripts/release.mjs verify '${{ github.ref_name }}' release-check
+      - name: Publish complete release
+        run: gh release edit '${{ github.ref_name }}' --draft=false --latest

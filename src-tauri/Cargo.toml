@@ -1,6 +1,6 @@
 [package]
 name = "quiet-workspace"
-version = "0.5.0"
+version = "0.6.0"
 description = "A small, local-first workspace"
 edition = "2021"
 rust-version = "1.85"
@@ -17,7 +17,7 @@ required-features = ["desktop"]
 [features]
 default = []
 custom-protocol = ["desktop", "tauri/custom-protocol"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-fs", "dep:tauri-plugin-opener"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-fs", "dep:tauri-plugin-opener", "dep:tauri-plugin-updater"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
@@ -30,6 +30,7 @@ tauri = { version = "2", features = [], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
 tauri-plugin-fs = { version = "2", optional = true }
 tauri-plugin-opener = { version = "2", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
 
 [profile.dev]
 debug = 0

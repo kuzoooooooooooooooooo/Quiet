@@ -1,7 +1,7 @@
 {
   "name": "quiet-workspace",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -12,13 +12,16 @@
     "test": "playwright test",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "check": "tsc -b",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "release:setup": "node scripts/setup-updater.mjs",
+    "test:release": "node --test scripts/release.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.0",
     "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2.7.2",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "dompurify": "^3.3.0",
     "marked": "^17.0.0",
     "react": "^19.2.0",
