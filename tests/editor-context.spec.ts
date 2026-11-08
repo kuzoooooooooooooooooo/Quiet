@@ -135,9 +135,10 @@ test('right-click acts on the clicked project, supports keyboard navigation, and
 }) => {
   await start(page);
   await createProject(page, 'Project B');
+  await createProject(page, 'Project C');
   const first = page.getByRole('button', { name: 'Project A', exact: true });
   await first.click({ button: 'right' });
-  await expect(page.getByRole('heading', { name: 'Project B', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Project C', exact: true })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
   await page
     .getByRole('dialog')
@@ -159,6 +160,7 @@ test('right-click acts on the clicked project, supports keyboard navigation, and
     .getByRole('button', { name: 'Delete project', exact: true })
     .click();
   await expect(renamed).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Project C', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(renamed).toBeVisible();
 });

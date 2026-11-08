@@ -756,7 +756,10 @@ export default function App() {
         documents: w.documents.filter((d) => d.projectId !== item.id),
         tasks: w.tasks.filter((t) => t.projectId !== item.id),
         materials: w.materials.filter((m) => m.projectId !== item.id),
-        context: { projectId: projects[0]?.id ?? null, tab: 'overview', documentId: null },
+        context:
+          w.context.projectId === item.id
+            ? { projectId: projects[0]?.id ?? null, tab: 'overview', documentId: null }
+            : w.context,
       };
     });
     rememberDeletion('Проєкт видалено.', (w) => ({
