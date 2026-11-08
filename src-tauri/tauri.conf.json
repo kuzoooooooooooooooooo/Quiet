@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Quiet \u2014 Workspace",
+        "title": "Quiet — Workspace",
         "width": 1280,
         "height": 850,
         "minWidth": 680,
@@ -37,7 +37,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4QUZDNEFEQzZENjMxQkQKUldTOU1kYkdyY1N2U0xuZHJlNzdkRzg2Zm5pMk5jYUhXYlQ4QkZUVHR3WGROM1hSREdmcVR2eGMK",
       "endpoints": [
         "https://github.com/kuzoooooooooooooooooo/Quiet/releases/latest/download/latest.json"
       ],
