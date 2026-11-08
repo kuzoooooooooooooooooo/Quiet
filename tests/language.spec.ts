@@ -59,10 +59,10 @@ test('English project, document, task, preview and search flows keep user conten
   await page.getByRole('button', { name: 'New document', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Document title' })).toHaveValue('Untitled');
   await page.getByRole('textbox', { name: 'Document title' }).fill('Власний план');
-  await page.getByRole('textbox', { name: 'Document content' }).fill('# SQLite\n\nПерший крок');
+  await page.getByRole('textbox', { name: 'Document content' }).fill('SQLite\n\nМій перший крок');
   await expect(page.locator('.document-meta')).toContainText('4 words');
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'SQLite', exact: true })).toBeVisible();
+  await expect(page.locator('.rich-content')).toContainText('SQLite');
   await page.keyboard.press('Control+k');
   await page.getByRole('textbox', { name: 'Search workspace', exact: true }).fill('To do');
   await expect(page.getByRole('button', { name: /Зібрати прототип/ })).toBeVisible();
@@ -76,8 +76,9 @@ test('English project, document, task, preview and search flows keep user conten
   await expect(page.getByRole('checkbox', { name: 'Зібрати прототип', exact: true })).toBeChecked();
   await page.getByRole('button', { name: /^Документи/ }).click();
   await expect(page.getByRole('textbox', { name: 'Назва документа' })).toHaveValue('Власний план');
-  await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveValue(
-    '# SQLite\n\nПерший крок',
+  await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveText(
+    'SQLite\n\nМій перший крок',
+    { useInnerText: true },
   );
 });
 

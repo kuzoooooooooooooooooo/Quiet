@@ -1,3 +1,4 @@
+pub mod attachments;
 pub mod database;
 pub mod model;
 
@@ -32,6 +33,38 @@ pub fn run() {
         database.lock().map_err(|e| e.to_string())?.save(&workspace)
     }
 
+    #[tauri::command]
+    fn store_attachment(
+        request: tauri::ipc::Request<'_>,
+        database: tauri::State<'_, Mutex<Database>>,
+    ) -> Result<crate::attachments::StoredAttachment, String> {
+        match request.body() {
+            tauri::ipc::InvokeBody::Raw(bytes) => database
+                .lock()
+                .map_err(|e| e.to_string())?
+                .store_attachment(bytes),
+            _ => Err("Expected binary attachment data".into()),
+        }
+    }
+    #[tauri::command]
+    fn load_attachment(
+        hash: String,
+        database: tauri::State<'_, Mutex<Database>>,
+    ) -> Result<tauri::ipc::Response, String> {
+        database
+            .lock()
+            .map_err(|e| e.to_string())?
+            .load_attachment(&hash)
+            .map(tauri::ipc::Response::new)
+    }
+    #[tauri::command]
+    fn prune_attachments(database: tauri::State<'_, Mutex<Database>>) -> Result<(), String> {
+        database
+            .lock()
+            .map_err(|e| e.to_string())?
+            .prune_attachments()
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -52,7 +85,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_workspace,
             save_workspace,
-            updater_enabled
+            updater_enabled,
+            store_attachment,
+            load_attachment,
+            prune_attachments
         ])
         .run(tauri::generate_context!())
         .expect("Could not start Quiet Workspace");

@@ -1,18 +1,10 @@
 import { t } from './i18n';
 import { emptyWorkspace, validateWorkspace } from './model';
 import type { Workspace } from './model';
+import { openDatabase } from './localDatabase';
+import { prepareAttachments, pruneAttachments } from './attachments';
 
 export const isDesktop = '__TAURI_INTERNALS__' in window;
-let database: Promise<IDBDatabase> | undefined;
-function openDatabase(): Promise<IDBDatabase> {
-  return (database ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open('quiet-workspace', 1);
-    request.onupgradeneeded = () => request.result.createObjectStore('workspace');
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error(t('Не вдалося відкрити сховище.')));
-    request.onblocked = () => reject(new Error(t('Закрий інші вкладки Quiet і спробуй знову.')));
-  }));
-}
 
 async function read(): Promise<unknown> {
   if (isDesktop) {
@@ -58,7 +50,13 @@ export async function loadWorkspace(): Promise<Workspace> {
     await saveWorkspace(empty);
     return empty;
   }
-  return validateWorkspace(data);
+  const validated = validateWorkspace(data, true);
+  const migrated = await prepareAttachments(validated);
+  if (validated.materials.some((m) => m.kind === 'file' && m.url.startsWith('data:')))
+    await saveWorkspace(migrated);
+  // GC is optional maintenance; failure must never hide a valid workspace.
+  await pruneAttachments(migrated).catch(() => undefined);
+  return migrated;
 }
 
 export async function openExternal(url: string): Promise<void> {

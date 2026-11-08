@@ -4,7 +4,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::{path::Path, time::Duration};
 
 pub struct Database {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl Database {
@@ -19,7 +19,7 @@ impl Database {
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|e| e.to_string())?;
-        if version > 1 {
+        if version > 2 {
             return Err("Database was created by a newer version of Quiet".into());
         }
         if version == 0 {
@@ -36,6 +36,12 @@ impl Database {
                  PRAGMA user_version = 1;
                  COMMIT;"
             ).map_err(|e| e.to_string())?;
+        }
+        if version < 2 {
+            connection.execute_batch("BEGIN IMMEDIATE;
+                CREATE TABLE attachments (hash TEXT PRIMARY KEY, codec TEXT NOT NULL, original_size INTEGER NOT NULL, bytes BLOB NOT NULL, touched INTEGER NOT NULL);
+                PRAGMA user_version = 2;
+                COMMIT;").map_err(|e| e.to_string())?;
         }
         Ok(Self { connection })
     }
@@ -78,6 +84,22 @@ impl Database {
 
     pub fn save(&mut self, workspace: &Workspace) -> Result<(), String> {
         workspace.validate()?;
+        for material in &workspace.materials {
+            if let Some(hash) = material.url.strip_prefix("attachment:") {
+                let size: Option<u64> = self
+                    .connection
+                    .query_row(
+                        "SELECT original_size FROM attachments WHERE hash=?1",
+                        [hash],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|e| e.to_string())?;
+                if size != Some(material.size) {
+                    return Err("Missing or mismatched attachment".into());
+                }
+            }
+        }
         let transaction = self.connection.transaction().map_err(|e| e.to_string())?;
         // Delete only removed records. Unchanged attachment data must not be rewritten
         // on every document keystroke or navigation update.
@@ -177,6 +199,7 @@ mod tests {
                 project_id: "p1".into(),
                 title: "Рішення".into(),
                 content: "# План\n\nRust + SQLite".into(),
+                format: None,
                 updated_at: "2026-11-07T10:00:00Z".into(),
             }],
             tasks: vec![Task {
