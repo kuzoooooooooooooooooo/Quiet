@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify';
 import type { Document } from './model';
 export const fonts = ['Arial', 'Georgia', 'Verdana', 'Courier New'] as const;
-const sizes = ['10px', '12px', '14px', '18px', '24px', '32px', '48px'];
+const sizes = ['10px', '13px', '16px', '18px', '24px', '32px', '48px'];
 export function cleanHtml(value: string): string {
   const fragment = DOMPurify.sanitize(value, {
     RETURN_DOM_FRAGMENT: true,
@@ -43,7 +43,7 @@ export function cleanHtml(value: string): string {
       element.tagName === 'FONT'
         ? sizes[Number(element.getAttribute('size')) - 1]
         : element.style.fontSize;
-    if (sizes.includes(size)) style.fontSize = size;
+    if ([...sizes, '12px', '14px'].includes(size)) style.fontSize = size;
     if (['left', 'center', 'right'].includes(element.style.textAlign))
       style.textAlign = element.style.textAlign;
     if (['bold', '700'].includes(element.style.fontWeight)) style.fontWeight = 'bold';

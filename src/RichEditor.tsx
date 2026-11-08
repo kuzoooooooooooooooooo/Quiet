@@ -131,7 +131,7 @@ export default function RichEditor({
             command('fontSize', e.target.value);
           }}
         >
-          {[10, 12, 14, 18, 24, 32, 48].map((value, index) => (
+          {[10, 13, 16, 18, 24, 32, 48].map((value, index) => (
             <option key={value} value={index + 1}>
               {value}
             </option>

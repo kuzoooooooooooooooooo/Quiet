@@ -216,3 +216,28 @@ test('documents, tasks and materials expose rename and delete through right-clic
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(page.locator('.material-row')).toContainText('renamed.txt');
 });
+
+test('font sizes keep the same visible size after reloading', async ({ page }) => {
+  await start(page);
+  await doc(page);
+  const content = page.getByRole('textbox', { name: 'Document content' });
+  await content.fill('Stable font size');
+  for (const [option, pixels] of [
+    ['2', '13px'],
+    ['3', '16px'],
+  ] as const) {
+    await selectText(page);
+    await page.getByRole('combobox', { name: 'Text size' }).selectOption(option);
+    await expect
+      .poll(() =>
+        content
+          .locator('font,span')
+          .last()
+          .evaluate((element) => getComputedStyle(element).fontSize),
+      )
+      .toBe(pixels);
+    await saved(page);
+    await page.reload();
+    await expect(content.locator(`span[style*="${pixels}"]`).last()).toHaveCSS('font-size', pixels);
+  }
+});
