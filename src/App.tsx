@@ -26,6 +26,16 @@ import { useTheme } from './theme';
 import type { Theme } from './theme';
 import { useUpdater } from './useUpdater';
 import UpdateSettings from './UpdateSettings';
+import RichEditor, { RichPreview } from './RichEditor';
+import { documentFile, documentText, markdownHtml } from './documentHtml';
+import {
+  portableWorkspace,
+  prepareAttachments,
+  readAttachment,
+  storeAttachment,
+} from './attachments';
+import ContextMenu, { RenameForm } from './ContextMenu';
+import type { ContextState, ContextAction } from './ContextMenu';
 
 const Markdown = lazy(() => import('./Markdown'));
 const shortcutKey = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl';
@@ -38,6 +48,12 @@ type ModalState =
   | { type: 'import'; workspace: Workspace }
   | { type: 'shortcuts' }
   | { type: 'settings' }
+  | {
+      type: 'rename';
+      kind: 'project' | 'document' | 'task' | 'material';
+      id: string;
+      value: string;
+    }
   | null;
 const tabIcons: Record<Tab, IconName> = {
   overview: 'grid',
@@ -288,6 +304,9 @@ function TaskRow({
   return (
     <div
       id={`item-${task.id}`}
+      data-context-kind="task"
+      data-context-id={task.id}
+      tabIndex={0}
       className={`task-row ${task.done ? 'done' : ''} ${highlight ? 'highlight' : ''}`}
     >
       <button
@@ -445,6 +464,8 @@ export default function App() {
   const [modal, setModal] = useState<ModalState>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextState | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const [notification, setNotification] = useState('');
   const [undo, setUndo] = useState<UndoAction | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
@@ -620,6 +641,7 @@ export default function App() {
       projectId: project.id,
       title: t('Без назви'),
       content: '',
+      format: 'html',
       updatedAt: now(),
     };
     update((w) => ({
@@ -633,7 +655,7 @@ export default function App() {
       documentTitle.current?.select();
     }, 0);
   }
-  function patchDocument(patch: Partial<Pick<Document, 'title' | 'content'>>) {
+  function patchDocument(patch: Partial<Pick<Document, 'title' | 'content' | 'format'>>) {
     if (!activeDocument) return;
     update((w) => ({
       ...w,
@@ -774,7 +796,9 @@ export default function App() {
     if (!workspace) return;
     try {
       const saved = await downloadBlob(
-        new Blob([JSON.stringify(workspace, null, 2)], { type: 'application/json' }),
+        new Blob([JSON.stringify(await portableWorkspace(workspace), null, 2)], {
+          type: 'application/json',
+        }),
         `quiet-backup-${now().slice(0, 10)}.json`,
       );
       if (saved) setNotification(t('Резервну копію завантажено.'));
@@ -787,7 +811,7 @@ export default function App() {
     try {
       if (file.size > 50 * 1024 * 1024)
         throw new Error(t('Максимальний розмір резервної копії — 50 МБ.'));
-      const data = validateWorkspace(JSON.parse(await file.text()));
+      const data = await prepareAttachments(validateWorkspace(JSON.parse(await file.text())));
       setModal({ type: 'import', workspace: data });
     } catch (error) {
       setNotification(t('Імпорт скасовано: {error}', { error: message(error) }));
@@ -800,25 +824,13 @@ export default function App() {
     try {
       if (file.size > 5 * 1024 * 1024)
         throw new Error(t('Для цієї версії розмір файлу обмежений 5 МБ.'));
-      const url = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () =>
-          resolve(
-            (reader.result as string).replace(
-              /^data:[^,]*,/,
-              'data:application/octet-stream;base64,',
-            ),
-          );
-        reader.onerror = () => reject(new Error(t('Не вдалося прочитати файл.')));
-        reader.readAsDataURL(file);
-      });
+      const stored = await storeAttachment(file);
       const material: Material = {
         id: uid(),
         projectId,
         title: file.name,
         kind: 'file',
-        url,
-        size: file.size,
+        ...stored,
         createdAt: now(),
       };
       update((w) =>
@@ -837,11 +849,123 @@ export default function App() {
       const url = safeUrl(material.url);
       if (url) void openExternal(url).catch((error) => setNotification(message(error)));
     } else {
-      const raw = atob(material.url.split(',')[1]);
-      const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0));
-      download(new Blob([bytes], { type: 'application/octet-stream' }), material.title);
+      void readAttachment(material)
+        .then((blob) => downloadBlob(blob, material.title))
+        .catch((error) =>
+          setNotification(t('Не вдалося завантажити: {error}', { error: message(error) })),
+        );
     }
   }
+  function recordContext(target: HTMLElement, x: number, y: number) {
+    if (!workspace || modal) return;
+    const element = target.closest<HTMLElement>('[data-context-kind]');
+    if (!element || target.closest('input,textarea,[contenteditable="true"]')) return;
+    const kind = element.dataset.contextKind as 'project' | 'document' | 'task' | 'material';
+    const id = element.dataset.contextId!;
+    const item =
+      kind === 'project'
+        ? workspace.projects.find((row) => row.id === id)
+        : kind === 'document'
+          ? workspace.documents.find((row) => row.id === id)
+          : kind === 'task'
+            ? workspace.tasks.find((row) => row.id === id)
+            : workspace.materials.find((row) => row.id === id);
+    if (!item) return;
+    const value = 'name' in item ? item.name : item.title;
+    const actions: ContextAction[] = [];
+    if (kind === 'project')
+      actions.push({ label: t('Відкрити'), icon: 'folder', action: () => selectProject(id) });
+    if (kind === 'document')
+      actions.push({
+        label: t('Відкрити'),
+        icon: 'file',
+        action: () => {
+          const doc = item as Document;
+          update((w) => ({
+            ...w,
+            context: { projectId: doc.projectId, tab: 'documents', documentId: id },
+          }));
+          setPreview(false);
+        },
+      });
+    if (kind === 'material')
+      actions.push({
+        label: t((item as Material).kind === 'file' ? 'Завантажити файл' : 'Відкрити'),
+        icon: (item as Material).kind === 'file' ? 'download' : 'external',
+        action: () => openMaterial(item as Material),
+      });
+    if (kind === 'task')
+      actions.push({
+        label: t((item as Task).done ? 'Повернути до роботи' : 'Позначити виконаним'),
+        icon: 'check',
+        action: () => toggleTask(id),
+      });
+    actions.push({
+      label: t('Перейменувати'),
+      icon: 'edit',
+      action: () => setModal({ type: 'rename', kind, id, value }),
+    });
+    if (kind === 'document')
+      actions.push({
+        label: t(
+          (item as Document).format === 'html' ? 'Завантажити HTML' : 'Завантажити Markdown',
+        ),
+        icon: 'download',
+        action: () => {
+          const file = documentFile(item as Document);
+          download(file.blob, file.name);
+        },
+      });
+    actions.push({
+      label: t(
+        kind === 'project'
+          ? 'Видалити проєкт'
+          : kind === 'document'
+            ? 'Видалити документ'
+            : kind === 'task'
+              ? 'Видалити завдання'
+              : 'Видалити матеріал {title}',
+        { title: value },
+      ),
+      icon: 'trash',
+      danger: true,
+      action: () => {
+        if (kind === 'project') setModal({ type: 'delete-project', project: item as Project });
+        else if (kind === 'document') deleteDocument(item as Document);
+        else if (kind === 'task') deleteTask(id);
+        else deleteMaterial(item as Material);
+      },
+    });
+    setContextMenu({ x, y, target: element, actions });
+    return true;
+  }
+  function renameRecord(
+    kind: 'project' | 'document' | 'task' | 'material',
+    id: string,
+    value: string,
+  ) {
+    update((w) => ({
+      ...w,
+      projects:
+        kind === 'project'
+          ? w.projects.map((p) => (p.id === id ? { ...p, name: value } : p))
+          : w.projects,
+      documents:
+        kind === 'document'
+          ? w.documents.map((d) => (d.id === id ? { ...d, title: value, updatedAt: now() } : d))
+          : w.documents,
+      tasks:
+        kind === 'task'
+          ? w.tasks.map((row) => (row.id === id ? { ...row, title: value } : row))
+          : w.tasks,
+      materials:
+        kind === 'material'
+          ? w.materials.map((row) => (row.id === id ? { ...row, title: value } : row))
+          : w.materials,
+    }));
+    closeModal();
+  }
+
   function selectResult(result: SearchResult) {
     update((w) => ({
       ...w,
@@ -885,7 +1009,20 @@ export default function App() {
     );
 
   return (
-    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}
+      onContextMenu={(event) => {
+        if (recordContext(event.target as HTMLElement, event.clientX, event.clientY))
+          event.preventDefault();
+      }}
+      onKeyDown={(event) => {
+        if ((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu') {
+          const target = event.target as HTMLElement;
+          const rect = target.getBoundingClientRect();
+          if (recordContext(target, rect.left, rect.bottom)) event.preventDefault();
+        }
+      }}
+    >
       {sidebarOpen && (
         <button
           className="sidebar-backdrop"
@@ -930,6 +1067,8 @@ export default function App() {
           {workspace.projects.map((p) => (
             <button
               key={p.id}
+              data-context-kind="project"
+              data-context-id={p.id}
               title={p.name}
               aria-label={p.name}
               className={`project-link ${project?.id === p.id ? 'active' : ''}`}
@@ -1189,6 +1328,8 @@ export default function App() {
                           .map((doc) => (
                             <button
                               key={doc.id}
+                              data-context-kind="document"
+                              data-context-id={doc.id}
                               className="document-card"
                               onClick={() => openDocument(doc.id)}
                             >
@@ -1198,7 +1339,7 @@ export default function App() {
                               <span>
                                 <strong>{doc.title}</strong>
                                 <small>
-                                  {doc.content
+                                  {documentText(doc)
                                     .split('\n')
                                     .find((line) => line.trim() && !line.startsWith('#'))
                                     ?.trim()
@@ -1336,6 +1477,8 @@ export default function App() {
                   {documents.map((doc) => (
                     <button
                       key={doc.id}
+                      data-context-kind="document"
+                      data-context-id={doc.id}
                       title={doc.title}
                       className={`document-list-item ${activeDocument?.id === doc.id ? 'active' : ''}`}
                       onClick={() => openDocument(doc.id)}
@@ -1371,16 +1514,41 @@ export default function App() {
                           key={activeDocument.id}
                           label={t('Дії документа')}
                           items={[
+                            ...(activeDocument.format !== 'html'
+                              ? [
+                                  {
+                                    label: t('Форматований текст'),
+                                    icon: 'edit' as const,
+                                    action: () => {
+                                      void markdownHtml(activeDocument.content).then((content) =>
+                                        patchDocument({ content, format: 'html' }),
+                                      );
+                                    },
+                                  },
+                                ]
+                              : []),
                             {
-                              label: t('Завантажити Markdown'),
-                              icon: 'download',
+                              label: t('Перейменувати'),
+                              icon: 'edit',
                               action: () =>
-                                download(
-                                  new Blob([activeDocument.content], {
-                                    type: 'text/markdown;charset=utf-8',
-                                  }),
-                                  `${activeDocument.title}.md`,
-                                ),
+                                setModal({
+                                  type: 'rename',
+                                  kind: 'document',
+                                  id: activeDocument.id,
+                                  value: activeDocument.title,
+                                }),
+                            },
+                            {
+                              label: t(
+                                activeDocument.format === 'html'
+                                  ? 'Завантажити HTML'
+                                  : 'Завантажити Markdown',
+                              ),
+                              icon: 'download',
+                              action: () => {
+                                const file = documentFile(activeDocument);
+                                download(file.blob, file.name);
+                              },
                             },
                             {
                               label: t('Видалити документ'),
@@ -1408,11 +1576,21 @@ export default function App() {
                           date: shortDate(activeDocument.updatedAt),
                           words: formatCount(
                             'word',
-                            activeDocument.content.trim().split(/\s+/).filter(Boolean).length,
+                            documentText(activeDocument).trim().split(/\s+/).filter(Boolean).length,
                           ),
                         })}
                       </div>
-                      {preview ? (
+                      {activeDocument.format === 'html' ? (
+                        preview ? (
+                          <RichPreview content={activeDocument.content} />
+                        ) : (
+                          <RichEditor
+                            key={activeDocument.id}
+                            content={activeDocument.content}
+                            onChange={(content) => patchDocument({ content })}
+                          />
+                        )
+                      ) : preview ? (
                         <Suspense fallback={<p className="muted">{t('Відкриваємо документ…')}</p>}>
                           <Markdown content={activeDocument.content} />
                         </Suspense>
@@ -1468,6 +1646,9 @@ export default function App() {
                       <div
                         id={`item-${material.id}`}
                         key={material.id}
+                        data-context-kind="material"
+                        data-context-id={material.id}
+                        tabIndex={0}
                         className={`material-row ${highlight === material.id ? 'highlight' : ''}`}
                       >
                         <span className="material-icon">
@@ -1480,6 +1661,17 @@ export default function App() {
                               ? new URL(material.url).hostname
                               : formatSize(material.size)}{' '}
                             · {shortDate(material.createdAt)}
+                            {material.kind === 'file' &&
+                              material.storedSize !== undefined &&
+                              material.storedSize < material.size && (
+                                <>
+                                  {' '}
+                                  ·{' '}
+                                  {t('Стиснуто до {size}', {
+                                    size: formatSize(material.storedSize),
+                                  })}
+                                </>
+                              )}
                           </small>
                         </button>
                         <button
@@ -1645,6 +1837,18 @@ export default function App() {
               update((w) => ({ ...w, materials: [...w.materials, material] }));
               closeModal();
             }}
+          />
+        </Modal>
+      )}
+      {contextMenu && <ContextMenu state={contextMenu} close={closeContextMenu} />}
+      {modal?.type === 'rename' && (
+        <Modal title={t('Перейменувати')} onClose={closeModal}>
+          <RenameForm
+            key={`${modal.kind}-${modal.id}`}
+            value={modal.value}
+            maxLength={modal.kind === 'project' ? 120 : modal.kind === 'document' ? 200 : 500}
+            save={(value) => renameRecord(modal.kind, modal.id, value)}
+            cancel={closeModal}
           />
         </Modal>
       )}

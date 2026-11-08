@@ -27,6 +27,8 @@ pub struct Document {
     pub project_id: String,
     pub title: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
     pub updated_at: String,
 }
 
@@ -49,6 +51,8 @@ pub struct Material {
     pub kind: MaterialKind,
     pub url: String,
     pub size: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_size: Option<u64>,
     pub created_at: String,
 }
 
@@ -136,6 +140,13 @@ impl Workspace {
                 return Err("Selected document does not belong to selected project".into());
             }
         }
+        if self.documents.iter().any(|d| {
+            d.format
+                .as_deref()
+                .is_some_and(|f| f != "html" && f != "markdown")
+        }) {
+            return Err("Unsupported document format".into());
+        }
         for material in &self.materials {
             match material.kind {
                 MaterialKind::Link
@@ -145,9 +156,18 @@ impl Workspace {
                     return Err("Unsupported link protocol".into())
                 }
                 MaterialKind::File
-                    if !material
+                    if !(material
                         .url
                         .starts_with("data:application/octet-stream;base64,")
+                        || material
+                            .url
+                            .strip_prefix("attachment:")
+                            .is_some_and(|hash| {
+                                hash.len() == 64
+                                    && hash
+                                        .bytes()
+                                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                            }))
                         || material.size > 5 * 1024 * 1024 =>
                 {
                     return Err("Unsupported attachment".into())

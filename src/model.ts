@@ -1,4 +1,5 @@
 import { t as translate } from './i18n';
+import { documentText } from './documentHtml';
 import type { Message } from './i18n';
 export type Tab = 'overview' | 'documents' | 'tasks' | 'materials';
 export type Tone = 'green' | 'blue' | 'orange' | 'violet';
@@ -14,6 +15,7 @@ export interface Document {
   projectId: string;
   title: string;
   content: string;
+  format?: 'markdown' | 'html';
   updatedAt: string;
 }
 export interface Task {
@@ -30,6 +32,7 @@ export interface Material {
   kind: 'link' | 'file';
   url: string;
   size: number;
+  storedSize?: number;
   createdAt: string;
 }
 export interface Workspace {
@@ -66,7 +69,7 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const isText = (v: unknown): v is string => typeof v === 'string';
 const isDate = (v: unknown) => isText(v) && Number.isFinite(Date.parse(v));
 
-export function validateWorkspace(input: unknown): Workspace {
+export function validateWorkspace(input: unknown, allowStoredFiles = false): Workspace {
   if (!isObject(input) || input.version !== 1 || !isObject(input.context))
     throw new Error(translate('Непідтримуваний формат резервної копії.'));
   const { projects, documents, tasks, materials, context } = input;
@@ -113,7 +116,11 @@ export function validateWorkspace(input: unknown): Workspace {
       throw new Error(translate('Запис не належить існуючому проєкту або не має назви.'));
   }
   for (const d of documents as Record<string, unknown>[])
-    if (!isText(d.content) || !isDate(d.updatedAt))
+    if (
+      !isText(d.content) ||
+      !isDate(d.updatedAt) ||
+      (d.format !== undefined && !['markdown', 'html'].includes(d.format as string))
+    )
       throw new Error(translate('Некоректний документ.'));
   for (const t of tasks as Record<string, unknown>[])
     if (typeof t.done !== 'boolean' || !isDate(t.createdAt))
@@ -132,7 +139,8 @@ export function validateWorkspace(input: unknown): Workspace {
       throw new Error(translate('Посилання має починатися з https:// або http://.'));
     if (
       m.kind === 'file' &&
-      (!/^data:application\/octet-stream;base64,[A-Za-z0-9+/]*={0,2}$/.test(m.url) ||
+      ((!/^data:application\/octet-stream;base64,[A-Za-z0-9+/]*={0,2}$/.test(m.url) &&
+        !(allowStoredFiles && /^attachment:[a-f0-9]{64}$/.test(m.url))) ||
         (m.size as number) > 5 * 1024 * 1024)
     )
       throw new Error(translate('Некоректний вкладений файл.'));
@@ -185,7 +193,7 @@ export function searchWorkspace(workspace: Workspace, query: string): SearchResu
       projectId: d.projectId,
       kind: 'document' as const,
       title: d.title,
-      detail: d.content,
+      detail: documentText(d),
     })),
     ...workspace.tasks.map((t) => ({
       id: t.id,

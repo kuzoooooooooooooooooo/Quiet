@@ -46,7 +46,7 @@ test('fresh workspace stays empty on reload and creates only user content', asyn
       page.evaluate(
         () =>
           new Promise<number>((resolve, reject) => {
-            const request = indexedDB.open('quiet-workspace', 1);
+            const request = indexedDB.open('quiet-workspace', 2);
             request.onsuccess = () => {
               const db = request.result;
               const tx = db.transaction('workspace', 'readonly');

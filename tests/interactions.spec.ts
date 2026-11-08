@@ -135,14 +135,16 @@ test('document and binary attachment undo restore content without dropping new d
   await page.getByRole('textbox', { name: 'Document content' }).fill('Keep this exact text.');
   await page.getByRole('button', { name: 'Document actions', exact: true }).click();
   const download = page.waitForEvent('download');
-  await page.getByRole('menuitem', { name: 'Download Markdown', exact: true }).click();
-  expect(await readFile((await (await download).path())!, 'utf8')).toBe('Keep this exact text.');
+  await page.getByRole('menuitem', { name: 'Download HTML', exact: true }).click();
+  expect(await readFile((await (await download).path())!, 'utf8')).toContain(
+    'Keep this exact text.',
+  );
   await page.getByRole('button', { name: 'Document actions', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Delete document', exact: true }).click();
   await quick(page, 'New document');
   await page.getByRole('textbox', { name: 'Document title' }).fill('Newer');
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveText(
     'Keep this exact text.',
   );
   await expect(page.getByRole('button', { name: 'Newer', exact: true })).toBeVisible();
@@ -182,7 +184,7 @@ test('project undo restores all its records and preserves work created after del
   await expect(page.getByRole('heading', { name: 'Research', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /example.com.*example.com/ })).toBeVisible();
   await page.getByRole('button', { name: /^Documents/ }).click();
-  await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveText(
     'Original content',
   );
   await page.getByRole('button', { name: /^Tasks/ }).click();

@@ -56,17 +56,18 @@ test('project → task → document → reload preserves content and context', a
   await page.getByRole('textbox', { name: 'Назва документа' }).fill('План реалізації');
   await page
     .getByRole('textbox', { name: 'Вміст документа' })
-    .fill('# Перша версія\n\nRust + SQLite. Без зайвого.');
+    .fill('Перша версія\n\nRust + SQLite. Без зайвого.');
   await saved(page);
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Назва документа' })).toHaveValue(
     'План реалізації',
   );
-  await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveValue(
-    '# Перша версія\n\nRust + SQLite. Без зайвого.',
+  await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveText(
+    'Перша версія\n\nRust + SQLite. Без зайвого.',
+    { useInnerText: true },
   );
   await page.getByRole('button', { name: 'Перегляд', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Перша версія' })).toBeVisible();
+  await expect(page.locator('.rich-content')).toContainText('Перша версія');
   await page.getByRole('button', { name: /^Завдання/ }).click();
   await expect(page.getByRole('checkbox', { name: 'Зібрати перший прототип' })).toBeChecked();
   expect(errors).toEqual([]);
@@ -167,13 +168,34 @@ test('deleting one project preserves another project', async ({ page }) => {
 });
 
 test('Markdown preview strips executable HTML and external images', async ({ page }) => {
-  await start(page);
-  await page.getByRole('button', { name: /Нотатки/ }).click();
+  await page.goto('/');
+  const date = '2026-11-07T10:00:00Z';
+  const legacy = {
+    version: 1,
+    projects: [{ id: 'p', name: 'Legacy', description: '', tone: 'green', createdAt: date }],
+    documents: [
+      {
+        id: 'd',
+        projectId: 'p',
+        title: 'Markdown',
+        content:
+          '# Безпечний текст\n\n<script>window.pwned=true</script><img src="https://example.com/track" onerror="window.pwned=true"><a href="javascript:alert(1)">bad</a>\n\n**Працює**',
+        updatedAt: date,
+      },
+    ],
+    tasks: [],
+    materials: [],
+    context: { projectId: 'p', tab: 'documents', documentId: 'd' },
+  };
   await page
-    .getByRole('textbox', { name: 'Вміст документа' })
-    .fill(
-      '# Безпечний текст\n\n<script>window.pwned=true</script><img src="https://example.com/track" onerror="window.pwned=true"><a href="javascript:alert(1)">bad</a>\n\n**Працює**',
-    );
+    .locator('input[type=file]')
+    .first()
+    .setInputFiles({
+      name: 'legacy.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(legacy)),
+    });
+  await page.getByRole('button', { name: 'Відновити', exact: true }).click();
   await page.getByRole('button', { name: 'Перегляд', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Безпечний текст' })).toBeVisible();
   await expect(
@@ -207,7 +229,7 @@ test('corrupt stored data shows recovery error without silently resetting data',
   await start(page);
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('quiet-workspace', 1);
+      const request = indexedDB.open('quiet-workspace', 2);
       request.onsuccess = () => {
         const db = request.result;
         const tx = db.transaction('workspace', 'readwrite');
@@ -246,7 +268,7 @@ test('storage failure is visible and retry saves the newest changes', async ({ p
   await page.getByRole('button', { name: 'Повторити', exact: true }).click();
   await saved(page);
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveText(
     'Новий текст не можна втратити.',
   );
 });

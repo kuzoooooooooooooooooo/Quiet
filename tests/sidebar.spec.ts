@@ -29,11 +29,18 @@ test('collapsing preserves the document, caret and saved context after reload', 
   await page.getByRole('textbox', { name: 'Document title', exact: true }).fill('Working notes');
   const content = page.getByRole('textbox', { name: 'Document content', exact: true });
   await content.fill('Keep this text and its cursor position.');
-  await content.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(5, 5));
+  await content.evaluate((element) => {
+    const range = document.createRange();
+    range.setStart(element.firstChild!, 5);
+    range.collapse(true);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
   await page.keyboard.press('Control+Backslash');
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/);
   await expect(content).toBeFocused();
-  expect(await content.evaluate((input: HTMLTextAreaElement) => input.selectionStart)).toBe(5);
+  expect(await content.evaluate(() => window.getSelection()?.anchorOffset)).toBe(5);
   await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Saved on this device' })).toBeVisible();
   await page.reload();
@@ -41,7 +48,7 @@ test('collapsing preserves the document, caret and saved context after reload', 
   await expect(page.getByRole('textbox', { name: 'Document title', exact: true })).toHaveValue(
     'Working notes',
   );
-  await expect(content).toHaveValue('Keep this text and its cursor position.');
+  await expect(content).toHaveText('Keep this text and its cursor position.');
   await expect(page.locator('.sidebar')).toHaveCSS('width', '56px');
   await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
   await expect(page.locator('.app-shell')).not.toHaveClass(/sidebar-collapsed/);
