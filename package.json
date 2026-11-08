@@ -14,7 +14,8 @@
     "check": "tsc -b",
     "format": "prettier --write .",
     "release:setup": "node scripts/setup-updater.mjs",
-    "test:release": "node --test scripts/release.test.mjs"
+    "test:release": "node --test scripts/release.test.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.0",
