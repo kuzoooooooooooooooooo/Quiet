@@ -1,0 +1,13 @@
+node_modules/
+dist/
+src-tauri/target/
+test-results/
+playwright-report/
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+*.tsbuildinfo
+src-tauri/gen/
