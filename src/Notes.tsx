@@ -3,6 +3,7 @@ import { t } from './i18n';
 import { Icon } from './Icon';
 import ActionMenu from './ActionMenu';
 export default function Notes({
+  embedded = false,
   notes,
   selected,
   onSelect,
@@ -11,6 +12,7 @@ export default function Notes({
   onRename,
   onDelete,
 }: {
+  embedded?: boolean;
   notes: Note[];
   selected: string | null;
   onSelect: (id: string) => void;
@@ -20,8 +22,9 @@ export default function Notes({
   onDelete: (note: Note) => void;
 }) {
   const active = notes.find((note) => note.id === selected) ?? notes[0];
+  const Root = embedded ? 'section' : 'main';
   return (
-    <main className="main-content notes-page">
+    <Root className={embedded ? 'notes-page embedded-notes' : 'main-content notes-page'}>
       <div className="content-heading">
         <h1>{t('Нотатки')}</h1>
         <button className="button primary" onClick={onCreate}>
@@ -82,6 +85,6 @@ export default function Notes({
           )}
         </div>
       )}
-    </main>
+    </Root>
   );
 }

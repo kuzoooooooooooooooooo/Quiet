@@ -2884,3 +2884,379 @@ kbd {
 .plain-note textarea:focus-visible {
   outline: none;
 }
+
+/* The canvas spans the window; translucent surfaces reveal it without live blur. */
+.workspace-area {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.module-picker {
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+}
+.module-picker legend {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.module-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.module-presets button {
+  font-size: 11px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+.module-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+.module-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.module-options input,
+.select-files input,
+.material-row > input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.module-picker small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+.collection-tools,
+.snippet-tools,
+.sheet-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.sort-control {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-width: 170px;
+}
+.collection-tools > .sort-control {
+  margin-right: auto;
+}
+.kit-module > .collection-tools {
+  margin-top: 0;
+}
+.kit-module .content-heading {
+  margin-top: 18px;
+}
+.kit-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 26px;
+  margin-top: 24px;
+}
+.kit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.kit-list button {
+  text-align: left;
+  padding: 12px;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-list button.active,
+.kit-list button:hover {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.kit-editor {
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 24px;
+}
+.kit-title {
+  width: 100%;
+  font-size: 24px;
+  font-weight: 550;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+}
+.snippet-code {
+  display: block;
+  width: 100%;
+  min-height: 52dvh;
+  padding: 18px;
+  resize: vertical;
+  font:
+    13px/1.8 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  tab-size: 4;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+}
+.embedded-notes {
+  padding: 0;
+}
+.embedded-notes h1 {
+  font-size: 22px;
+}
+.sheet-scroll {
+  overflow: auto;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.simple-sheet {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.simple-sheet th,
+.simple-sheet td {
+  border: 1px solid var(--line);
+  padding: 0;
+  min-width: 145px;
+}
+.simple-sheet th {
+  background: var(--surface-subtle);
+  position: relative;
+}
+.simple-sheet th:last-child,
+.simple-sheet td:last-child {
+  min-width: 32px;
+  width: 32px;
+}
+.simple-sheet th input {
+  padding-right: 28px;
+  font-weight: 600;
+}
+.simple-sheet th > button {
+  position: absolute;
+  right: 0;
+  top: 3px;
+}
+.simple-sheet input {
+  width: 100%;
+  padding: 11px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+}
+.simple-sheet input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.sheet-paging {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  margin: 16px;
+  font-size: 12px;
+}
+.sheet-paging button {
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+.task-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.task-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.board-column {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-subtle) 80%, transparent);
+  min-height: 240px;
+}
+.board-column h3 {
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 4px 12px;
+  color: var(--text-secondary);
+}
+.board-column h3 span {
+  color: var(--muted);
+  font-weight: 400;
+}
+.board-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+  cursor: grab;
+}
+.board-card .task-row {
+  flex-wrap: wrap;
+  padding: 5px 0;
+  border: 0;
+  gap: 5px;
+}
+.board-card .task-row .inline-name {
+  min-width: 50px;
+}
+.board-card select {
+  width: 100%;
+  font-size: 10px;
+  padding: 6px;
+  background: var(--surface-subtle);
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+.module-launchers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.module-launchers .home-project {
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  font-size: 13px;
+}
+.file-drop-overlay {
+  position: fixed;
+  inset: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed var(--accent);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 550;
+}
+.select-files {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.document-list-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.document-list-heading .sort-control {
+  flex-basis: 100%;
+  max-width: 100%;
+  order: 3;
+}
+.filter-bar .sort-control {
+  margin-left: auto;
+}
+@media (max-width: 800px) {
+  .kit-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .kit-list {
+    flex-direction: row;
+    overflow: auto;
+  }
+  .kit-list button {
+    flex-shrink: 0;
+    max-width: 180px;
+  }
+  .kit-editor {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .task-board {
+    display: flex;
+    overflow: auto;
+    scroll-snap-type: x proximity;
+  }
+  .board-column {
+    min-width: 240px;
+    flex: 1;
+    scroll-snap-align: start;
+  }
+  .task-view-controls {
+    gap: 8px;
+  }
+  .task-progress {
+    font-size: 10px;
+  }
+  .sheet-tools .button {
+    font-size: 11px;
+    padding: 8px;
+  }
+  .collection-tools .button {
+    font-size: 10px;
+    padding: 8px;
+  }
+  .filter-bar {
+    flex-wrap: wrap;
+  }
+  .filter-bar .sort-control {
+    margin-left: 0;
+  }
+}
+.snippet-tools select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  padding: 9px 12px;
+  border-radius: 9px;
+}
+.snippet-code:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.task-stage {
+  font-size: 10px;
+  padding: 3px 6px;
+  white-space: nowrap;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.board-card .task-stage {
+  display: none;
+}

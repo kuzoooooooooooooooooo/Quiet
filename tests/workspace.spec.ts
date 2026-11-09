@@ -161,7 +161,7 @@ test('corrupt stored data shows recovery error without silently resetting data',
   await start(page);
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('quiet-workspace', 2);
+      const request = indexedDB.open('quiet-workspace');
       request.onsuccess = () => {
         const db = request.result;
         const tx = db.transaction('workspace', 'readwrite');

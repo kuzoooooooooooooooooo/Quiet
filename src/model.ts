@@ -2,7 +2,10 @@ import { t as translate } from './i18n';
 import { attachmentLimit } from './attachmentLimits';
 import { documentText } from './documentHtml';
 import type { Message } from './i18n';
-export type Tab = 'overview' | 'documents' | 'tasks' | 'materials';
+import { validateKit } from './projectKit';
+import type { ProjectKit } from './projectKit';
+export type Tab =
+  'overview' | 'documents' | 'tasks' | 'materials' | 'notes' | 'snippets' | 'tables';
 export type Tone = 'green' | 'blue' | 'orange' | 'violet';
 export interface Note {
   id: string;
@@ -12,6 +15,7 @@ export interface Note {
   updatedAt: string;
 }
 export interface Project {
+  kit?: ProjectKit;
   id: string;
   name: string;
   description: string;
@@ -27,6 +31,7 @@ export interface Document {
   updatedAt: string;
 }
 export interface Task {
+  stage?: 'doing';
   id: string;
   projectId: string;
   title: string;
@@ -61,6 +66,9 @@ export const tabs: { id: Tab; label: Message }[] = [
   { id: 'documents', label: 'Документи' },
   { id: 'tasks', label: 'Завдання' },
   { id: 'materials', label: 'Матеріали' },
+  { id: 'notes', label: 'Нотатки' },
+  { id: 'snippets', label: 'Фрагменти коду' },
+  { id: 'tables', label: 'Таблиці' },
 ];
 
 export function emptyWorkspace(): Workspace {
@@ -124,6 +132,7 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
       !isDate(p.createdAt)
     )
       throw new Error(translate('Некоректні дані проєкту.'));
+    if (p.kit !== undefined) validateKit(p.kit, ids);
     projectIds.add(p.id as string);
   }
   for (const row of [
@@ -148,7 +157,11 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
     )
       throw new Error(translate('Некоректний документ.'));
   for (const t of tasks as Record<string, unknown>[])
-    if (typeof t.done !== 'boolean' || !isDate(t.createdAt))
+    if (
+      typeof t.done !== 'boolean' ||
+      !isDate(t.createdAt) ||
+      (t.stage !== undefined && t.stage !== 'doing')
+    )
       throw new Error(translate('Некоректне завдання.'));
   for (const m of materials as Record<string, unknown>[]) {
     if (
@@ -198,7 +211,7 @@ export function safeUrl(value: string): string | null {
 export type SearchResult = {
   id: string;
   projectId: string | null;
-  kind: 'project' | 'document' | 'task' | 'material' | 'note';
+  kind: 'project' | 'document' | 'task' | 'material' | 'note' | 'snippet' | 'table';
   title: string;
   detail: string;
 };
@@ -206,6 +219,29 @@ export function searchWorkspace(workspace: Workspace, query: string): SearchResu
   const terms = query.normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
   const rows: SearchResult[] = [
+    ...workspace.projects.flatMap((p) => [
+      ...(p.kit?.notes ?? []).map((row) => ({
+        id: row.id,
+        projectId: p.id,
+        kind: 'note' as const,
+        title: row.title,
+        detail: row.content,
+      })),
+      ...(p.kit?.snippets ?? []).map((row) => ({
+        id: row.id,
+        projectId: p.id,
+        kind: 'snippet' as const,
+        title: row.title,
+        detail: row.content,
+      })),
+      ...(p.kit?.tables ?? []).map((row) => ({
+        id: row.id,
+        projectId: p.id,
+        kind: 'table' as const,
+        title: row.title,
+        detail: row.rows.map((r) => r.cells.join(' ')).join(' '),
+      })),
+    ]),
     ...workspace.notes.map((note) => ({
       id: note.id,
       projectId: null,

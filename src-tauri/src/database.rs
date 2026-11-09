@@ -19,7 +19,7 @@ impl Database {
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|e| e.to_string())?;
-        if version > 3 {
+        if version > 4 {
             return Err("Database was created by a newer version of Quiet".into());
         }
         if version == 0 {
@@ -45,6 +45,12 @@ impl Database {
         }
         if version < 3 {
             connection.execute_batch("BEGIN IMMEDIATE; CREATE TABLE notes (id TEXT PRIMARY KEY, data TEXT NOT NULL); PRAGMA user_version=3; COMMIT;").map_err(|e|e.to_string())?;
+        }
+        // Mark module-aware data so older binaries cannot overwrite project extensions.
+        if version < 4 {
+            connection
+                .execute_batch("PRAGMA user_version=4;")
+                .map_err(|e| e.to_string())?;
         }
         Ok(Self { connection })
     }
@@ -206,6 +212,7 @@ mod tests {
                 updated_at: "2026-11-07T10:00:00Z".into(),
             }],
             projects: vec![Project {
+                kit: None,
                 id: "p1".into(),
                 name: "Дослідження".into(),
                 description: "Local first".into(),
@@ -221,6 +228,7 @@ mod tests {
                 updated_at: "2026-11-07T10:00:00Z".into(),
             }],
             tasks: vec![Task {
+                stage: None,
                 id: "t1".into(),
                 project_id: "p1".into(),
                 title: "Перевірити збереження".into(),
@@ -256,6 +264,47 @@ mod tests {
             let db = Database::open(&path).unwrap();
             assert_eq!(db.load().unwrap(), Some(expected));
         }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn project_modules_round_trip_and_hiding_preserves_all_content() {
+        let path = std::env::temp_dir().join(format!(
+            "quiet-kit-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut db = Database::open(&path).unwrap();
+        let mut expected = fixture();
+        expected.projects[0].kit=Some(serde_json::from_value(serde_json::json!({
+          "enabled":["notes","snippets","tables","tasks"],
+          "notes":[{"id":"pn1","title":"Project note","content":"Keep this","createdAt":"2026-11-09T10:00:00Z","updatedAt":"2026-11-09T10:00:00Z"}],
+          "snippets":[{"id":"s1","title":"Example","content":"fn main() {}","language":"rust","createdAt":"2026-11-09T10:00:00Z","updatedAt":"2026-11-09T10:00:00Z"}],
+          "tables":[{"id":"sheet1","title":"Research","columns":[{"id":"col1","title":"Source"}],"rows":[{"id":"row1","cells":["SQLite"]}],"createdAt":"2026-11-09T10:00:00Z","updatedAt":"2026-11-09T10:00:00Z"}],
+          "preferences":{"lastTab":"tables","taskView":"board","sort":{"tasks":"manual"},"order":{"tasks":["t1"]},"active":{"tables":"sheet1"}}
+        })).unwrap());
+        expected.tasks[0].stage = Some("doing".into());
+        db.save(&expected).unwrap();
+        drop(db);
+        let mut db = Database::open(&path).unwrap();
+        assert_eq!(db.load().unwrap(), Some(expected.clone()));
+        expected.projects[0].kit.as_mut().unwrap().enabled.clear();
+        expected.projects[0].description = "Unrelated edit".into();
+        db.save(&expected).unwrap();
+        assert_eq!(db.load().unwrap(), Some(expected.clone()));
+        let mut invalid = expected.clone();
+        invalid.projects[0].kit.as_mut().unwrap().notes[0].id = "d1".into();
+        assert!(db.save(&invalid).is_err());
+        let mut invalid = expected.clone();
+        invalid.projects[0].kit.as_mut().unwrap().tables[0].rows[0]
+            .cells
+            .clear();
+        assert!(db.save(&invalid).is_err());
+        assert_eq!(db.load().unwrap(), Some(expected));
+        drop(db);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -352,7 +401,7 @@ mod tests {
                 db.connection
                     .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
                     .unwrap(),
-                3
+                4
             );
         }
         std::fs::remove_file(path).unwrap();
