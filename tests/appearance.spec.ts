@@ -1,6 +1,6 @@
+import { resumeProject, seedWorkspace } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
 
 async function openSettings(page: Page) {
   await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
@@ -9,11 +9,11 @@ async function openSettings(page: Page) {
 
 test('fresh workspace stays empty on reload and creates only user content', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('main', { name: 'Робоча область' })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await expect(page.locator('.project-link')).toHaveCount(0);
   await expect(page.getByText('Місце для важливого.', { exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole('main', { name: 'Робоча область' })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await page.getByRole('button', { name: 'Створити проєкт', exact: true }).click();
   await page.getByLabel('Назва проєкту').fill('Власний проєкт');
   await page
@@ -23,22 +23,13 @@ test('fresh workspace stays empty on reload and creates only user content', asyn
   await expect(page.getByRole('heading', { name: 'Власний проєкт', exact: true })).toBeVisible();
   await expect(page.locator('.task-row,.document-card,.material-row')).toHaveCount(0);
   await expect(page.locator('.focus-banner,.sidebar-note,.workspace-footnote')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Резервні копії', exact: true }).click();
-  const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Експортувати workspace' }).click();
-  const backup = JSON.parse(await readFile((await (await pending).path())!, 'utf8'));
-  expect(backup.projects.map((p: { name: string }) => p.name)).toEqual(['Власний проєкт']);
-  expect(backup.documents).toEqual([]);
-  expect(backup.tasks).toEqual([]);
-  expect(backup.materials).toEqual([]);
-  await page.getByRole('button', { name: 'Закрити', exact: true }).click();
   await page.getByRole('button', { name: 'Меню проєкту', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Видалити проєкт', exact: true }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Видалити проєкт', exact: true })
     .click();
-  await expect(page.getByRole('main', { name: 'Робоча область' })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await expect(page.getByText('Проєкт видалено.', { exact: true })).toBeVisible();
   // Confirm the deletion reached durable storage before opening a new app instance.
   await expect
@@ -61,7 +52,7 @@ test('fresh workspace stays empty on reload and creates only user content', asyn
     )
     .toBe(0);
   await page.reload();
-  await expect(page.getByRole('main', { name: 'Робоча область' })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await expect(page.locator('.project-link')).toHaveCount(0);
 });
 
@@ -139,20 +130,14 @@ test('appearance changes preserve existing documents and the selected project', 
   };
   await page.goto('/');
   await expect(page.getByRole('main')).toBeVisible();
-  await page
-    .locator('input[type=file]')
-    .first()
-    .setInputFiles({
-      name: 'old-backup.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(fixture)),
-    });
-  await page.getByRole('button', { name: 'Відновити', exact: true }).click();
+  await seedWorkspace(page, fixture);
+  await resumeProject(page);
   await openSettings(page);
   await page.getByRole('radio', { name: 'Темна', exact: true }).check();
   await page.getByRole('button', { name: 'Закрити', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Збережено на пристрої' })).toBeVisible();
   await page.reload();
+  await resumeProject(page);
   await expect(page.getByRole('heading', { name: 'Існуючий проєкт' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveValue(
     'Мій власний текст',

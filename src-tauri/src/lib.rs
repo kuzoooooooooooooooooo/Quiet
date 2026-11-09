@@ -34,7 +34,7 @@ pub fn run() {
     }
 
     #[tauri::command]
-    fn store_attachment(
+    async fn store_attachment(
         request: tauri::ipc::Request<'_>,
         database: tauri::State<'_, Mutex<Database>>,
     ) -> Result<crate::attachments::StoredAttachment, String> {
@@ -47,7 +47,7 @@ pub fn run() {
         }
     }
     #[tauri::command]
-    fn load_attachment(
+    async fn load_attachment(
         hash: String,
         database: tauri::State<'_, Mutex<Database>>,
     ) -> Result<tauri::ipc::Response, String> {

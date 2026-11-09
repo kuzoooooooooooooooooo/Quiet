@@ -1,3 +1,4 @@
+import { resumeProject } from './helpers';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ async function project(page: Page, name = 'Research') {
 }
 async function start(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('main', { name: 'Workspace', exact: true })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await project(page);
 }
 async function quick(page: Page, name: string) {
@@ -59,6 +60,7 @@ test('inline names save on Enter and blur, cancel on Escape, and reject empty na
     .press('Enter');
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.getByRole('heading', { name: 'Product research', exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Write the brief', exact: true })).toBeVisible();
 });
@@ -119,6 +121,7 @@ test('undoing a task deletion preserves subsequent edits and the original order'
   ]);
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.locator('.task-row .inline-name-button > span')).toHaveText([
     'First',
     'Second, edited',
@@ -152,7 +155,7 @@ test('document and binary attachment undo restore content without dropping new d
   const bytes = Buffer.from([0, 255, 1, 128, 42]);
   await page
     .locator('input[type=file]')
-    .nth(1)
+    .first()
     .setInputFiles({ name: 'sample.bin', mimeType: 'application/octet-stream', buffer: bytes });
   await page.getByRole('button', { name: 'Delete material sample.bin', exact: true }).click();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -193,32 +196,8 @@ test('project undo restores all its records and preserves work created after del
   await expect(page.getByRole('checkbox', { name: 'New task', exact: true })).toBeVisible();
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.locator('.project-link')).toHaveCount(2);
-});
-
-test('restoring a backup invalidates undo from the previous workspace', async ({ page }) => {
-  await start(page);
-  await task(page, 'Removed');
-  await page.getByRole('button', { name: 'Delete task Removed', exact: true }).click();
-  const empty = {
-    version: 1,
-    projects: [],
-    documents: [],
-    tasks: [],
-    materials: [],
-    context: { projectId: null, tab: 'overview', documentId: null },
-  };
-  await page
-    .locator('input[type=file]')
-    .first()
-    .setInputFiles({
-      name: 'empty.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(empty)),
-    });
-  await page.getByRole('dialog').getByRole('button', { name: 'Restore', exact: true }).click();
-  await expect(page.getByRole('main', { name: 'Workspace', exact: true })).toBeEmpty();
-  await expect(page.locator('.undo-notice')).toHaveCount(0);
 });
 
 test('undo stays available while focused and expires after leaving it', async ({ page }) => {

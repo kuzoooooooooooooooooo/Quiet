@@ -30,7 +30,7 @@ export default function UpdateSettings({ updater }: { updater: ReturnType<typeof
                         ? t('Встановлено найновішу версію.')
                         : updater.version
                           ? t('Доступна версія {version}.', { version: updater.version })
-                          : t('Перевіряй і встановлюй нові версії тут.')}
+                          : ''}
       </p>
       {updater.error && (
         <details className="update-details">
