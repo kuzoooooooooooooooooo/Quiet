@@ -19,7 +19,7 @@ impl Database {
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|e| e.to_string())?;
-        if version > 2 {
+        if version > 3 {
             return Err("Database was created by a newer version of Quiet".into());
         }
         if version == 0 {
@@ -43,6 +43,9 @@ impl Database {
                 PRAGMA user_version = 2;
                 COMMIT;").map_err(|e| e.to_string())?;
         }
+        if version < 3 {
+            connection.execute_batch("BEGIN IMMEDIATE; CREATE TABLE notes (id TEXT PRIMARY KEY, data TEXT NOT NULL); PRAGMA user_version=3; COMMIT;").map_err(|e|e.to_string())?;
+        }
         Ok(Self { connection })
     }
 
@@ -60,6 +63,7 @@ impl Database {
         let context: Context = serde_json::from_str(&context).map_err(|e| e.to_string())?;
         let workspace = Workspace {
             version: 1,
+            notes: self.rows("SELECT data FROM notes ORDER BY rowid")?,
             projects: self.rows("SELECT data FROM projects ORDER BY rowid")?,
             documents: self.rows("SELECT data FROM documents ORDER BY rowid")?,
             tasks: self.rows("SELECT data FROM tasks ORDER BY rowid")?,
@@ -105,6 +109,10 @@ impl Database {
         // on every document keystroke or navigation update.
         for (table, ids) in [
             (
+                "notes",
+                workspace.notes.iter().map(|n| &n.id).collect::<Vec<_>>(),
+            ),
+            (
                 "documents",
                 workspace
                     .documents
@@ -137,6 +145,9 @@ impl Database {
                     params![json(&ids)?],
                 )
                 .map_err(|e| e.to_string())?;
+        }
+        for note in &workspace.notes {
+            transaction.execute("INSERT INTO notes(id,data) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data WHERE data<>excluded.data",params![note.id,json(note)?]).map_err(|e|e.to_string())?;
         }
         for project in &workspace.projects {
             transaction
@@ -182,11 +193,18 @@ fn json(value: &impl Serialize) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Document, Project, Tab, Task, Tone};
+    use crate::model::{Document, Note, Project, Tab, Task, Tone};
 
     fn fixture() -> Workspace {
         Workspace {
             version: 1,
+            notes: vec![Note {
+                id: "n1".into(),
+                title: "Personal".into(),
+                content: "Standalone note\nSecond line".into(),
+                created_at: "2026-11-07T10:00:00Z".into(),
+                updated_at: "2026-11-07T10:00:00Z".into(),
+            }],
             projects: vec![Project {
                 id: "p1".into(),
                 name: "Дослідження".into(),
@@ -270,6 +288,7 @@ mod tests {
         db.save(&fixture()).unwrap();
         let empty = Workspace {
             version: 1,
+            notes: vec![],
             projects: vec![],
             documents: vec![],
             tasks: vec![],
@@ -292,6 +311,51 @@ mod tests {
         let mut workspace = fixture();
         workspace.context.project_id = None;
         assert!(workspace.validate().is_err());
+    }
+
+    #[test]
+    fn notes_survive_project_deletion_and_can_be_removed_independently() {
+        let mut db = Database::open(":memory:").unwrap();
+        let mut workspace = fixture();
+        db.save(&workspace).unwrap();
+        workspace.projects.clear();
+        workspace.documents.clear();
+        workspace.tasks.clear();
+        workspace.context = Context {
+            project_id: None,
+            tab: Tab::Overview,
+            document_id: None,
+        };
+        db.save(&workspace).unwrap();
+        assert_eq!(db.load().unwrap().unwrap().notes, workspace.notes);
+        workspace.notes.clear();
+        db.save(&workspace).unwrap();
+        assert!(db.load().unwrap().unwrap().notes.is_empty());
+    }
+
+    #[test]
+    fn schema_two_upgrades_to_notes_without_changing_existing_records() {
+        let path = std::env::temp_dir().join(format!("quiet-v2-{}.db", std::process::id()));
+        let mut expected = fixture();
+        expected.notes.clear();
+        {
+            let mut db = Database::open(&path).unwrap();
+            db.save(&expected).unwrap();
+            db.connection
+                .execute_batch("DROP TABLE notes; PRAGMA user_version=2;")
+                .unwrap();
+        }
+        {
+            let db = Database::open(&path).unwrap();
+            assert_eq!(db.load().unwrap(), Some(expected));
+            assert_eq!(
+                db.connection
+                    .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
+                    .unwrap(),
+                3
+            );
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

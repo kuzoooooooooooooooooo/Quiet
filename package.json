@@ -1,7 +1,7 @@
 {
   "name": "quiet-workspace",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -24,6 +24,7 @@
     "@tauri-apps/plugin-opener": "^2.7.2",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "dompurify": "^3.3.0",
+    "fflate": "^0.8.3",
     "marked": "^17.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

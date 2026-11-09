@@ -10,10 +10,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { FormEvent, ReactNode } from 'react';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
-import { now, safeUrl, searchWorkspace, tabs, uid, validateWorkspace } from './model';
+import { now, safeUrl, searchWorkspace, tabs, uid } from './model';
 import type {
   Document,
   Material,
+  Note,
   Project,
   SearchResult,
   Tab,
@@ -24,16 +25,15 @@ import type {
 import { downloadBlob, isDesktop, loadWorkspace, openExternal, saveWorkspace } from './storage';
 import { useTheme } from './theme';
 import type { Theme } from './theme';
+import Notes from './Notes';
+import FilePreview from './FilePreview';
+import { attachmentLimit, fileType } from './attachmentLimits';
+import { backgrounds, useBackground } from './background';
 import { useUpdater } from './useUpdater';
 import UpdateSettings from './UpdateSettings';
 import RichEditor, { RichPreview } from './RichEditor';
 import { documentFile, documentText, markdownHtml } from './documentHtml';
-import {
-  portableWorkspace,
-  prepareAttachments,
-  readAttachment,
-  storeAttachment,
-} from './attachments';
+import { readAttachment, storeAttachment } from './attachments';
 import ContextMenu, { RenameForm } from './ContextMenu';
 import type { ContextState, ContextAction } from './ContextMenu';
 
@@ -44,13 +44,12 @@ type ModalState =
   | { type: 'project'; project?: Project }
   | { type: 'delete-project'; project: Project }
   | { type: 'material' }
-  | { type: 'backup' }
-  | { type: 'import'; workspace: Workspace }
   | { type: 'shortcuts' }
   | { type: 'settings' }
+  | { type: 'file-preview'; material: Material }
   | {
       type: 'rename';
-      kind: 'project' | 'document' | 'task' | 'material';
+      kind: 'project' | 'document' | 'task' | 'material' | 'note';
       id: string;
       value: string;
     }
@@ -66,6 +65,7 @@ const resultIcons: Record<SearchResult['kind'], IconName> = {
   document: 'file',
   task: 'circle',
   material: 'link',
+  note: 'note',
 };
 const toneNames: Record<Tone, Message> = {
   green: 'Зелений',
@@ -93,12 +93,14 @@ function Modal({
   onClose,
   children,
   wide = false,
+  className = '',
   locked = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  className?: string;
   locked?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -118,7 +120,7 @@ function Modal({
   return (
     <dialog
       ref={ref}
-      className={`modal ${wide ? 'wide' : ''}`}
+      className={`modal ${wide ? 'wide' : ''} ${className}`}
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
@@ -339,18 +341,17 @@ function Search({
   workspace,
   onSelect,
   onClose,
-  onCreate,
 }: {
   workspace: Workspace;
   onSelect: (result: SearchResult) => void;
   onClose: () => void;
-  onCreate: () => void;
 }) {
   const { language } = useLanguage();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const results = useMemo(() => searchWorkspace(workspace, query), [workspace, query, language]);
-  const projectName = (id: string) => workspace.projects.find((p) => p.id === id)?.name ?? '';
+  const projectName = (id: string | null) =>
+    workspace.projects.find((p) => p.id === id)?.name ?? '';
   useEffect(() => {
     document.getElementById(`search-result-${cursor}`)?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
@@ -361,7 +362,7 @@ function Search({
         <input
           autoFocus
           aria-label={t('Пошук у workspace')}
-          placeholder={t('Проєкти, документи, завдання…')}
+          placeholder={t('Пошук')}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -379,25 +380,12 @@ function Search({
             if (event.key === 'Enter') {
               event.preventDefault();
               if (results[cursor]) onSelect(results[cursor]);
-              else if (!query.trim()) onCreate();
             }
           }}
         />
       </div>
       <div className="search-results">
-        {!query.trim() ? (
-          <>
-            <p className="eyebrow">{t('Швидкі дії')}</p>
-            <button className="search-result" onClick={onCreate}>
-              <Icon name="plus" />
-              <span>{t('Створити проєкт')}</span>
-              <kbd>↵</kbd>
-            </button>
-            <p className="search-hint">
-              {t('Шукай за назвою або вмістом — у всіх проєктах одразу.')}
-            </p>
-          </>
-        ) : results.length ? (
+        {query.trim() && results.length ? (
           results.map((result, index) => (
             <button
               key={`${result.kind}-${result.id}`}
@@ -412,38 +400,24 @@ function Search({
               <span className="result-copy">
                 <strong>{result.title}</strong>
                 <small>
-                  {projectName(result.projectId)} ·{' '}
-                  {result.kind === 'project'
-                    ? t('Проєкт')
-                    : result.kind === 'document'
-                      ? t('Документ')
-                      : result.kind === 'task'
-                        ? t('Завдання')
-                        : t('Матеріал')}
+                  {result.projectId && <>{projectName(result.projectId)} · </>}
+                  {result.kind === 'note'
+                    ? t('Нотатка')
+                    : result.kind === 'project'
+                      ? t('Проєкт')
+                      : result.kind === 'document'
+                        ? t('Документ')
+                        : result.kind === 'task'
+                          ? t('Завдання')
+                          : t('Матеріал')}
                 </small>
               </span>
               <Icon name="arrow" size={16} />
             </button>
           ))
-        ) : (
-          <Empty
-            icon="search"
-            title={t('Нічого не знайшлося')}
-            text={t('Спробуй інше слово або коротший запит.')}
-          />
-        )}
-      </div>
-      <div className="search-footer">
-        <span>
-          <kbd>↑</kbd>
-          <kbd>↓</kbd> {t('обрати')}
-        </span>
-        <span>
-          <kbd>Enter</kbd> {t('відкрити')}
-        </span>
-        <span>
-          <kbd>Esc</kbd> {t('закрити')}
-        </span>
+        ) : query.trim() ? (
+          <Empty icon="search" title={t('Нічого не знайшлося')} text="" />
+        ) : null}
       </div>
     </Modal>
   );
@@ -451,6 +425,9 @@ function Search({
 
 export default function App() {
   const { theme, selectTheme } = useTheme();
+  const { background, selectBackground } = useBackground();
+  const [view, setView] = useState<'home' | 'notes' | 'project'>('home');
+  const [noteId, setNoteId] = useState<string | null>(null);
   const { collapsed, toggleSidebar } = useSidebar();
   const { language, selectLanguage } = useLanguage();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -472,7 +449,6 @@ export default function App() {
   const [taskFilter, setTaskFilter] = useState<'all' | 'active' | 'done'>('all');
   const [preview, setPreview] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
-  const importInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const taskInput = useRef<HTMLInputElement>(null);
   const documentTitle = useRef<HTMLInputElement>(null);
@@ -612,7 +588,10 @@ export default function App() {
     setPreview(false);
   }, [workspace?.context.projectId]);
 
-  const project = workspace?.projects.find((p) => p.id === workspace.context.projectId);
+  const project =
+    view === 'project'
+      ? workspace?.projects.find((p) => p.id === workspace.context.projectId)
+      : undefined;
   const tab = workspace?.context.tab ?? 'overview';
   const documents = workspace?.documents.filter((d) => d.projectId === project?.id) ?? [];
   const tasks = workspace?.tasks.filter((t) => t.projectId === project?.id) ?? [];
@@ -623,7 +602,15 @@ export default function App() {
   const activeTasks = tasks.filter((t) => !t.done);
   const closeModal = () => setModal(null);
 
+  function goHome() {
+    setView('home');
+    setModal(null);
+    setSearchOpen(false);
+    setContextMenu(null);
+    setSidebarOpen(false);
+  }
   function selectProject(id: string) {
+    setView('project');
     update((w) => ({ ...w, context: { projectId: id, tab: 'overview', documentId: null } }));
     setSidebarOpen(false);
   }
@@ -795,44 +782,18 @@ export default function App() {
       setNotification(t('Не вдалося завантажити: {error}', { error: message(error) })),
     );
   }
-  async function exportBackup() {
-    if (!workspace) return;
-    try {
-      const saved = await downloadBlob(
-        new Blob([JSON.stringify(await portableWorkspace(workspace), null, 2)], {
-          type: 'application/json',
-        }),
-        `quiet-backup-${now().slice(0, 10)}.json`,
-      );
-      if (saved) setNotification(t('Резервну копію завантажено.'));
-    } catch (error) {
-      setNotification(t('Не вдалося завантажити: {error}', { error: message(error) }));
-    }
-  }
-  async function importBackup(file: File | undefined) {
-    if (!file) return;
-    try {
-      if (file.size > 50 * 1024 * 1024)
-        throw new Error(t('Максимальний розмір резервної копії — 50 МБ.'));
-      const data = await prepareAttachments(validateWorkspace(JSON.parse(await file.text())));
-      setModal({ type: 'import', workspace: data });
-    } catch (error) {
-      setNotification(t('Імпорт скасовано: {error}', { error: message(error) }));
-    }
-    if (importInput.current) importInput.current.value = '';
-  }
   async function attachFile(file: File | undefined) {
     if (!file || !project) return;
     const projectId = project.id;
     try {
-      if (file.size > 5 * 1024 * 1024)
-        throw new Error(t('Для цієї версії розмір файлу обмежений 5 МБ.'));
+      if (file.size > attachmentLimit) throw new Error(t('Максимальний розмір файлу — 25 МБ.'));
       const stored = await storeAttachment(file);
       const material: Material = {
         id: uid(),
         projectId,
         title: file.name,
         kind: 'file',
+        fileType: fileType({ title: file.name }),
         ...stored,
         createdAt: now(),
       };
@@ -847,7 +808,7 @@ export default function App() {
     }
     if (fileInput.current) fileInput.current.value = '';
   }
-  function openMaterial(material: Material) {
+  function downloadMaterial(material: Material) {
     if (material.kind === 'link') {
       const url = safeUrl(material.url);
       if (url) void openExternal(url).catch((error) => setNotification(message(error)));
@@ -859,11 +820,47 @@ export default function App() {
         );
     }
   }
+  function openMaterial(material: Material) {
+    if (material.kind === 'link') downloadMaterial(material);
+    else setModal({ type: 'file-preview', material });
+  }
+  function createNote() {
+    const stamp = now();
+    const note: Note = {
+      id: uid(),
+      title: t('Нова нотатка'),
+      content: '',
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    update((w) => ({ ...w, notes: [note, ...w.notes] }));
+    setNoteId(note.id);
+    setView('notes');
+    setSidebarOpen(false);
+  }
+  function changeNote(id: string, patch: Partial<Pick<Note, 'title' | 'content'>>) {
+    update((w) => ({
+      ...w,
+      notes: w.notes.map((note) =>
+        note.id === id ? { ...note, ...patch, updatedAt: now() } : note,
+      ),
+    }));
+  }
+  function deleteNote(note: Note) {
+    if (!workspace) return;
+    const index = workspace.notes.findIndex((row) => row.id === note.id);
+    update((w) => ({ ...w, notes: w.notes.filter((row) => row.id !== note.id) }));
+    rememberDeletion('Нотатку видалено.', (w) => ({
+      ...w,
+      notes: restoreAt(w.notes, note, index),
+    }));
+  }
   function recordContext(target: HTMLElement, x: number, y: number) {
     if (!workspace || modal) return;
     const element = target.closest<HTMLElement>('[data-context-kind]');
     if (!element || target.closest('input,textarea,[contenteditable="true"]')) return;
-    const kind = element.dataset.contextKind as 'project' | 'document' | 'task' | 'material';
+    const kind = element.dataset.contextKind as
+      'project' | 'document' | 'task' | 'material' | 'note';
     const id = element.dataset.contextId!;
     const item =
       kind === 'project'
@@ -872,8 +869,40 @@ export default function App() {
           ? workspace.documents.find((row) => row.id === id)
           : kind === 'task'
             ? workspace.tasks.find((row) => row.id === id)
-            : workspace.materials.find((row) => row.id === id);
+            : kind === 'note'
+              ? workspace.notes.find((row) => row.id === id)
+              : workspace.materials.find((row) => row.id === id);
     if (!item) return;
+    if (kind === 'note') {
+      const note = item as Note;
+      setContextMenu({
+        x,
+        y,
+        target: element,
+        actions: [
+          {
+            label: t('Відкрити'),
+            icon: 'note',
+            action: () => {
+              setView('notes');
+              setNoteId(id);
+            },
+          },
+          {
+            label: t('Перейменувати'),
+            icon: 'edit',
+            action: () => setModal({ type: 'rename', kind: 'note', id, value: note.title }),
+          },
+          {
+            label: t('Видалити нотатку'),
+            icon: 'trash',
+            danger: true,
+            action: () => deleteNote(note),
+          },
+        ],
+      });
+      return true;
+    }
     const value = 'name' in item ? item.name : item.title;
     const actions: ContextAction[] = [];
     if (kind === 'project')
@@ -888,14 +917,21 @@ export default function App() {
             ...w,
             context: { projectId: doc.projectId, tab: 'documents', documentId: id },
           }));
+          setView('project');
           setPreview(false);
         },
       });
     if (kind === 'material')
       actions.push({
-        label: t((item as Material).kind === 'file' ? 'Завантажити файл' : 'Відкрити'),
-        icon: (item as Material).kind === 'file' ? 'download' : 'external',
+        label: t((item as Material).kind === 'file' ? 'Переглянути' : 'Відкрити'),
+        icon: (item as Material).kind === 'file' ? 'eye' : 'external',
         action: () => openMaterial(item as Material),
+      });
+    if (kind === 'material' && (item as Material).kind === 'file')
+      actions.push({
+        label: t('Завантажити файл'),
+        icon: 'download',
+        action: () => downloadMaterial(item as Material),
       });
     if (kind === 'task')
       actions.push({
@@ -943,12 +979,18 @@ export default function App() {
     return true;
   }
   function renameRecord(
-    kind: 'project' | 'document' | 'task' | 'material',
+    kind: 'project' | 'document' | 'task' | 'material' | 'note',
     id: string,
     value: string,
   ) {
     update((w) => ({
       ...w,
+      notes:
+        kind === 'note'
+          ? w.notes.map((note) =>
+              note.id === id ? { ...note, title: value, updatedAt: now() } : note,
+            )
+          : w.notes,
       projects:
         kind === 'project'
           ? w.projects.map((p) => (p.id === id ? { ...p, name: value } : p))
@@ -970,6 +1012,13 @@ export default function App() {
   }
 
   function selectResult(result: SearchResult) {
+    if (result.kind === 'note') {
+      setNoteId(result.id);
+      setView('notes');
+      setSearchOpen(false);
+      return;
+    }
+    setView('project');
     update((w) => ({
       ...w,
       context: {
@@ -1035,12 +1084,14 @@ export default function App() {
       )}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} aria-label={t('Проєкти')}>
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            q
-          </div>
-          <span className="brand-name">
-            quiet<span className="brand-dot">.</span>
-          </span>
+          <button className="brand-home" aria-label="quiet" title={t('Головна')} onClick={goHome}>
+            <span className="brand-mark" aria-hidden="true">
+              q
+            </span>
+            <span className="brand-name">
+              quiet<span className="brand-dot">.</span>
+            </span>
+          </button>
           <button
             className="icon-button sidebar-toggle"
             aria-label={collapsed ? t('Розгорнути панель') : t('Згорнути панель')}
@@ -1063,6 +1114,29 @@ export default function App() {
           <span className="rail-label">{t('Знайти будь-що')}</span>
           <kbd>{shortcutKey} K</kbd>
         </button>
+        <nav className="sidebar-nav" aria-label={t('Навігація')}>
+          <button
+            className={view === 'home' || (view === 'project' && !project) ? 'active' : ''}
+            aria-current={view === 'home' || (view === 'project' && !project) ? 'page' : undefined}
+            title={t('Головна')}
+            onClick={goHome}
+          >
+            <Icon name="home" size={17} />
+            <span className="rail-label">{t('Головна')}</span>
+          </button>
+          <button
+            className={view === 'notes' ? 'active' : ''}
+            aria-current={view === 'notes' ? 'page' : undefined}
+            title={t('Нотатки')}
+            onClick={() => {
+              setView('notes');
+              setSidebarOpen(false);
+            }}
+          >
+            <Icon name="note" size={17} />
+            <span className="rail-label">{t('Нотатки')}</span>
+          </button>
+        </nav>
         <div className="sidebar-section-heading">
           <span>{t('ПРОЄКТИ')}</span>
         </div>
@@ -1097,15 +1171,6 @@ export default function App() {
         </nav>
         <div className="sidebar-bottom">
           <button
-            aria-label={t('Резервні копії')}
-            title={t('Резервні копії')}
-            onClick={() => setModal({ type: 'backup' })}
-          >
-            <Icon name="download" size={16} />
-
-            <span className="rail-label">{t('Резервні копії')}</span>
-          </button>
-          <button
             aria-label={t('Налаштування')}
             title={t('Налаштування')}
             onClick={() => {
@@ -1137,7 +1202,9 @@ export default function App() {
               onClick={() => setSearchOpen(true)}
             >
               <Icon name="search" size={14} />
-              <span className="breadcrumb-root">{project?.name ?? 'Workspace'}</span>
+              <span className="breadcrumb-root">
+                {project?.name ?? t(view === 'notes' ? 'Нотатки' : 'Головна')}
+              </span>
               {project && (
                 <>
                   <Icon name="chevron" size={11} />
@@ -1146,7 +1213,7 @@ export default function App() {
               )}
             </button>
           </div>
-          {(workspace.projects.length > 0 || status === 'error') && (
+          {(workspace.projects.length > 0 || workspace.notes.length > 0 || status === 'error') && (
             <div
               className={`save-status ${status === 'error' ? 'failed' : ''}`}
               role="status"
@@ -1172,12 +1239,53 @@ export default function App() {
             <button onClick={() => setWorkspace((w) => (w ? { ...w } : w))}>
               {t('Повторити')}
             </button>
-            <button onClick={exportBackup}>{t('Завантажити копію')}</button>
           </div>
         )}
 
-        {!project ? (
-          <main className="blank-workspace" aria-label={t('Робоча область')} />
+        {view === 'notes' ? (
+          <Notes
+            notes={workspace.notes}
+            selected={noteId}
+            onSelect={setNoteId}
+            onCreate={createNote}
+            onChange={changeNote}
+            onRename={(note) =>
+              setModal({ type: 'rename', kind: 'note', id: note.id, value: note.title })
+            }
+            onDelete={deleteNote}
+          />
+        ) : !project ? (
+          <main className="main-content home-page" aria-label={t('Головна')}>
+            <div className="content-heading">
+              <h1>{t('Головна')}</h1>
+              <button
+                className="button secondary"
+                aria-label={t('Новий проєкт')}
+                onClick={() => setModal({ type: 'project' })}
+              >
+                <Icon name="plus" size={16} />
+                {t('Новий проєкт')}
+              </button>
+            </div>
+            <div className="home-project-list">
+              {workspace.projects.map((p) => (
+                <button
+                  key={p.id}
+                  className="home-project"
+                  data-context-kind="project"
+                  data-context-id={p.id}
+                  onClick={() => selectProject(p.id)}
+                >
+                  <span className={`project-dot ${p.tone}`} />
+                  <span>
+                    <strong>{p.name}</strong>
+                    {p.description && <small>{p.description}</small>}
+                  </span>
+                  <Icon name="chevron" size={16} />
+                </button>
+              ))}
+            </div>
+          </main>
         ) : (
           <main className="main-content">
             <div className="project-header">
@@ -1662,19 +1770,8 @@ export default function App() {
                           <small>
                             {material.kind === 'link'
                               ? new URL(material.url).hostname
-                              : formatSize(material.size)}{' '}
+                              : `${fileType(material).toUpperCase()} · ${formatSize(material.size)}`}{' '}
                             · {shortDate(material.createdAt)}
-                            {material.kind === 'file' &&
-                              material.storedSize !== undefined &&
-                              material.storedSize < material.size && (
-                                <>
-                                  {' '}
-                                  ·{' '}
-                                  {t('Стиснуто до {size}', {
-                                    size: formatSize(material.storedSize),
-                                  })}
-                                </>
-                              )}
                           </small>
                         </button>
                         <button
@@ -1684,7 +1781,11 @@ export default function App() {
                               ? t('Відкрити {title}', { title: material.title })
                               : t('Завантажити {title}', { title: material.title })
                           }
-                          onClick={() => openMaterial(material)}
+                          onClick={() =>
+                            material.kind === 'file'
+                              ? downloadMaterial(material)
+                              : openMaterial(material)
+                          }
                         >
                           <Icon
                             name={material.kind === 'link' ? 'external' : 'download'}
@@ -1713,24 +1814,12 @@ export default function App() {
                     </button>
                   </Empty>
                 )}
-                <p className="storage-note">
-                  <Icon name="folder" size={14} />
-
-                  {t('Файли до 5 МБ · Зберігаються локально · Без завантаження на сервер')}
-                </p>
               </section>
             )}
           </main>
         )}
       </div>
 
-      <input
-        type="file"
-        accept="application/json,.json"
-        ref={importInput}
-        hidden
-        onChange={(event) => void importBackup(event.target.files?.[0])}
-      />
       <input
         type="file"
         ref={fileInput}
@@ -1765,10 +1854,6 @@ export default function App() {
           workspace={workspace}
           onClose={() => setSearchOpen(false)}
           onSelect={selectResult}
-          onCreate={() => {
-            setSearchOpen(false);
-            setModal({ type: 'project' });
-          }}
         />
       )}
       {modal?.type === 'project' && (
@@ -1797,6 +1882,7 @@ export default function App() {
               }));
               closeModal();
               setSidebarOpen(false);
+              setView('project');
             }}
           />
         </Modal>
@@ -1808,11 +1894,7 @@ export default function App() {
               name: modal.project.name,
             })}
           </p>
-          <button className="text-button" onClick={exportBackup}>
-            <Icon name="download" size={15} />
 
-            {t('Спочатку завантажити резервну копію')}
-          </button>
           <div className="modal-actions">
             <button className="button secondary" onClick={closeModal}>
               {t('Залишити')}
@@ -1855,6 +1937,11 @@ export default function App() {
           />
         </Modal>
       )}
+      {modal?.type === 'file-preview' && (
+        <Modal title={modal.material.title} onClose={closeModal} wide className="file-modal">
+          <FilePreview material={modal.material} />
+        </Modal>
+      )}
       {modal?.type === 'settings' && (
         <Modal title={t('Налаштування')} onClose={closeModal}>
           <fieldset className="theme-picker">
@@ -1894,6 +1981,31 @@ export default function App() {
                   <span className="theme-option-label">
                     <Icon name={option.icon} size={15} />
                     <span>{option.label}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="background-picker">
+            <legend>{t('Фон')}</legend>
+            <div className="background-options">
+              {backgrounds.map((value, index) => (
+                <label
+                  key={value}
+                  className={`background-option ${background === value ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="background"
+                    value={value}
+                    checked={background === value}
+                    onChange={() => {
+                      if (!selectBackground(value)) setNotification(t('Не вдалося зберегти фон.'));
+                    }}
+                  />
+                  <span className={`background-swatch background-${value}`} aria-hidden="true" />
+                  <span>
+                    {t((['Стандартний', 'Світанок', 'Ліс', 'Лаванда', 'Океан'] as const)[index])}
                   </span>
                 </label>
               ))}
@@ -1943,72 +2055,6 @@ export default function App() {
           <p className="modal-description" role="status">
             {t('Зберігаємо зміни та встановлюємо оновлення…')}
           </p>
-        </Modal>
-      )}
-      {modal?.type === 'backup' && (
-        <Modal title={t('Резервні копії')} onClose={closeModal}>
-          <p className="modal-description">
-            {t(
-              'Дані зберігаються на цьому пристрої. Завантаж копію, щоб мати запасний примірник або перенести workspace в інший браузер чи desktop-додаток.',
-            )}
-          </p>
-          <div className="backup-options">
-            <button onClick={exportBackup}>
-              <span className="backup-icon">
-                <Icon name="download" size={22} />
-              </span>
-              <span>
-                <strong>{t('Експортувати workspace')}</strong>
-                <small>{t('Усі проєкти, документи, завдання й файли · JSON')}</small>
-              </span>
-              <Icon name="chevron" size={17} />
-            </button>
-            <button onClick={() => importInput.current?.click()}>
-              <span className="backup-icon">
-                <Icon name="upload" size={22} />
-              </span>
-              <span>
-                <strong>{t('Відновити з копії')}</strong>
-                <small>{t('Замінить поточні дані після підтвердження')}</small>
-              </span>
-              <Icon name="chevron" size={17} />
-            </button>
-          </div>
-          <p className="storage-note">
-            {t('Автоматичної синхронізації між пристроями поки немає.')}
-          </p>
-        </Modal>
-      )}
-      {modal?.type === 'import' && (
-        <Modal title={t('Відновити workspace?')} onClose={closeModal}>
-          <p className="modal-description">
-            {t('У копії: {projects}, {documents}, {tasks}. Поточні дані буде замінено.', {
-              projects: formatCount('project', modal.workspace.projects.length),
-              documents: formatCount('document', modal.workspace.documents.length),
-              tasks: formatCount('task', modal.workspace.tasks.length),
-            })}
-          </p>
-          <button className="text-button" onClick={exportBackup}>
-            <Icon name="download" size={15} />
-
-            {t('Завантажити поточні дані перед заміною')}
-          </button>
-          <div className="modal-actions">
-            <button className="button secondary" onClick={closeModal}>
-              {t('Скасувати')}
-            </button>
-            <button
-              className="button primary"
-              onClick={() => {
-                setUndo(null);
-                setWorkspace(modal.workspace);
-                closeModal();
-                setNotification(t('Workspace відновлено з копії.'));
-              }}
-            >
-              {t('Відновити')}
-            </button>
-          </div>
         </Modal>
       )}
       {modal?.type === 'shortcuts' && (

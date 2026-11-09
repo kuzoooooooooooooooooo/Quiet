@@ -1,3 +1,4 @@
+import { resumeProject } from './helpers';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -14,7 +15,7 @@ async function createProject(page: Page, name = 'Project A') {
 }
 async function start(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('main')).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await createProject(page);
 }
 async function doc(page: Page, title = 'Writing') {
@@ -55,6 +56,7 @@ test('new documents format text, preserve selection through controls, undo and r
   await page.getByRole('button', { name: 'Align center', exact: true }).click();
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(content.locator('b,strong')).toHaveText('Simple document');
   await expect(content.locator('i,em')).toHaveText('Simple document');
   await expect(content.locator('u')).toHaveText('Simple document');
@@ -123,6 +125,7 @@ test('pasted and imported rich text cannot load remote content or execute HTML',
   await expect(content.locator('b')).toHaveText('Safe text');
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(
     content.locator('script,img,iframe,[style*="url"],[style*="9999"],[href^="javascript:"]'),
   ).toHaveCount(0);
@@ -197,7 +200,7 @@ test('documents, tasks and materials expose rename and delete through right-clic
   await page.getByRole('button', { name: /^Materials/ }).click();
   await page
     .locator('input[type=file]')
-    .nth(1)
+    .first()
     .setInputFiles({ name: 'file.txt', mimeType: 'text/plain', buffer: Buffer.from('data') });
   await page.locator('.material-row').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
@@ -238,6 +241,7 @@ test('font sizes keep the same visible size after reloading', async ({ page }) =
       .toBe(pixels);
     await saved(page);
     await page.reload();
+    await resumeProject(page);
     await expect(content.locator(`span[style*="${pixels}"]`).last()).toHaveCSS('font-size', pixels);
   }
 });

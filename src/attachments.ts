@@ -1,8 +1,9 @@
 import { openDatabase } from './localDatabase';
 import type { Material, Workspace } from './model';
 import { t } from './i18n';
+import { attachmentLimit } from './attachmentLimits';
 const desktop = '__TAURI_INTERNALS__' in window;
-const limit = 5 * 1024 * 1024;
+const limit = attachmentLimit;
 export const storedFile = /^attachment:([a-f0-9]{64})$/;
 type Stored = {
   hash: string;
@@ -43,7 +44,7 @@ async function transform(blob: Blob, decompress = false): Promise<Blob> {
 export async function storeAttachment(
   blob: Blob,
 ): Promise<{ url: string; size: number; storedSize: number }> {
-  if (blob.size > limit) throw new Error(t('Для цієї версії розмір файлу обмежений 5 МБ.'));
+  if (blob.size > limit) throw new Error(t('Максимальний розмір файлу — 25 МБ.'));
   const bytes = await blob.arrayBuffer();
   if (desktop) {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -56,9 +57,11 @@ export async function storeAttachment(
   const hash = await digest(bytes);
   let packed = blob;
   let codec: Stored['codec'] = 'raw';
-  if (typeof CompressionStream !== 'undefined' && blob.size > 128) {
+  if (blob.size > 128) {
     // Near-incompressible input can grow beyond the limit; raw storage remains valid.
-    const compressed = await transform(blob).catch(() => blob);
+    const compressed = await import('./compression')
+      .then(({ compressAttachment }) => compressAttachment(bytes))
+      .catch(() => blob);
     if (compressed.size < blob.size) {
       packed = compressed;
       codec = 'gzip';
@@ -129,30 +132,6 @@ export async function prepareAttachments(workspace: Workspace): Promise<Workspac
         ? { ...material, ...(await storeAttachment(await readAttachment(material))) }
         : material,
     );
-  }
-  return { ...workspace, materials };
-}
-export async function portableWorkspace(workspace: Workspace): Promise<Workspace> {
-  const materials: Material[] = [];
-  for (const material of workspace.materials) {
-    if (material.kind !== 'file') {
-      materials.push(material);
-      continue;
-    }
-    const blob = await readAttachment(material);
-    const url = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () =>
-        resolve(
-          (reader.result as string).replace(
-            /^data:[^,]*,/,
-            'data:application/octet-stream;base64,',
-          ),
-        );
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-    materials.push({ ...material, url });
   }
   return { ...workspace, materials };
 }

@@ -1,8 +1,16 @@
 import { t as translate } from './i18n';
+import { attachmentLimit } from './attachmentLimits';
 import { documentText } from './documentHtml';
 import type { Message } from './i18n';
 export type Tab = 'overview' | 'documents' | 'tasks' | 'materials';
 export type Tone = 'green' | 'blue' | 'orange' | 'violet';
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface Project {
   id: string;
   name: string;
@@ -33,10 +41,12 @@ export interface Material {
   url: string;
   size: number;
   storedSize?: number;
+  fileType?: string;
   createdAt: string;
 }
 export interface Workspace {
   version: 1;
+  notes: Note[];
   projects: Project[];
   documents: Document[];
   tasks: Task[];
@@ -56,6 +66,7 @@ export const tabs: { id: Tab; label: Message }[] = [
 export function emptyWorkspace(): Workspace {
   return {
     version: 1,
+    notes: [],
     projects: [],
     documents: [],
     tasks: [],
@@ -73,9 +84,12 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
   if (!isObject(input) || input.version !== 1 || !isObject(input.context))
     throw new Error(translate('Непідтримуваний формат резервної копії.'));
   const { projects, documents, tasks, materials, context } = input;
+  const notes = input.notes ?? [];
+  if (!Array.isArray(notes)) throw new Error(translate('Некоректна нотатка.'));
   if (![projects, documents, tasks, materials].every(Array.isArray))
     throw new Error(translate('У копії відсутні необхідні дані.'));
   const rows = [
+    ...notes,
     ...(projects as unknown[]),
     ...(documents as unknown[]),
     ...(tasks as unknown[]),
@@ -87,6 +101,17 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
     if (!isObject(row) || !isText(row.id) || !row.id || ids.has(row.id))
       throw new Error(translate('Некоректні або повторювані ідентифікатори.'));
     ids.add(row.id);
+  }
+  for (const note of notes) {
+    if (
+      !isObject(note) ||
+      !isText(note.title) ||
+      !note.title.trim() ||
+      !isText(note.content) ||
+      !isDate(note.createdAt) ||
+      !isDate(note.updatedAt)
+    )
+      throw new Error(translate('Некоректна нотатка.'));
   }
   const projectIds = new Set<string>();
   for (const p of projects as unknown[]) {
@@ -141,7 +166,7 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
       m.kind === 'file' &&
       ((!/^data:application\/octet-stream;base64,[A-Za-z0-9+/]*={0,2}$/.test(m.url) &&
         !(allowStoredFiles && /^attachment:[a-f0-9]{64}$/.test(m.url))) ||
-        (m.size as number) > 5 * 1024 * 1024)
+        (m.size as number) > attachmentLimit)
     )
       throw new Error(translate('Некоректний вкладений файл.'));
   }
@@ -156,7 +181,7 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
     )
   )
     throw new Error(translate('Некоректний стан робочої області.'));
-  return input as unknown as Workspace;
+  return { ...input, notes } as unknown as Workspace;
 }
 
 export function safeUrl(value: string): string | null {
@@ -172,8 +197,8 @@ export function safeUrl(value: string): string | null {
 
 export type SearchResult = {
   id: string;
-  projectId: string;
-  kind: 'project' | 'document' | 'task' | 'material';
+  projectId: string | null;
+  kind: 'project' | 'document' | 'task' | 'material' | 'note';
   title: string;
   detail: string;
 };
@@ -181,6 +206,13 @@ export function searchWorkspace(workspace: Workspace, query: string): SearchResu
   const terms = query.normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
   const rows: SearchResult[] = [
+    ...workspace.notes.map((note) => ({
+      id: note.id,
+      projectId: null,
+      kind: 'note' as const,
+      title: note.title,
+      detail: note.content,
+    })),
     ...workspace.projects.map((p) => ({
       id: p.id,
       projectId: p.id,

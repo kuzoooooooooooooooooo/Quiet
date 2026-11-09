@@ -1,13 +1,13 @@
+import { resumeProject, seedWorkspace } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
 
 async function saved(page: Page) {
   await expect(page.getByRole('status').filter({ hasText: 'Збережено на пристрої' })).toBeVisible();
 }
 async function start(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('main', { name: 'Робоча область' })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await createProject(page, 'Мій workspace');
   await page.getByRole('button', { name: /^Документи/ }).click();
   await page.getByRole('button', { name: 'Новий документ', exact: true }).click();
@@ -32,16 +32,6 @@ async function createProject(page: Page, name: string) {
     .click();
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
 }
-async function exportData(page: Page) {
-  await page.getByRole('button', { name: 'Резервні копії', exact: true }).click();
-  const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Експортувати workspace' }).click();
-  const result = await download;
-  const data = JSON.parse(await readFile((await result.path())!, 'utf8'));
-  await page.getByRole('button', { name: 'Закрити', exact: true }).click();
-  return data;
-}
-
 test('project → task → document → reload preserves content and context', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -59,6 +49,7 @@ test('project → task → document → reload preserves content and context', a
     .fill('Перша версія\n\nRust + SQLite. Без зайвого.');
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.getByRole('textbox', { name: 'Назва документа' })).toHaveValue(
     'План реалізації',
   );
@@ -81,7 +72,9 @@ test('global search finds document content and jumps across projects with keyboa
   await page.keyboard.press('Control+k');
   const search = page.getByRole('textbox', { name: 'Пошук у workspace' });
   await search.fill('SQLite');
-  await expect(page.getByRole('button', { name: /Нотатки/ })).toBeVisible();
+  await expect(
+    page.locator('.search-result,.document-card').filter({ hasText: 'Нотатки' }),
+  ).toBeVisible();
   await search.press('Enter');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Мій workspace', exact: true })).toBeVisible();
@@ -91,63 +84,6 @@ test('global search finds document content and jumps across projects with keyboa
   await expect(page.getByText('Нічого не знайшлося')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-});
-
-test('links, binary files and backup survive export and confirmed import', async ({ page }) => {
-  await start(page);
-  await page.getByRole('button', { name: /^Матеріали/ }).click();
-  await page.getByRole('button', { name: 'Посилання', exact: true }).click();
-  await page.getByLabel('Посилання', { exact: true }).fill('https://www.rust-lang.org/learn');
-  await page.getByLabel('Назва', { exact: false }).fill('Rust docs');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Додати посилання', exact: true })
-    .click();
-  await page
-    .locator('input[type=file]')
-    .nth(1)
-    .setInputFiles({
-      name: 'notes.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('Зміст файлу ✓'),
-    });
-  await expect(page.getByRole('button', { name: /notes.txt.*Б/ })).toBeVisible();
-  await saved(page);
-  const fileDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Завантажити notes.txt', exact: true }).click();
-  expect(await readFile((await (await fileDownload).path())!, 'utf8')).toBe('Зміст файлу ✓');
-  const backup = await exportData(page);
-  expect(backup.materials).toHaveLength(2);
-  await createProject(page, 'Тимчасовий');
-  await page
-    .locator('input[type=file]')
-    .nth(0)
-    .setInputFiles({
-      name: 'backup.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(backup)),
-    });
-  await expect(page.getByRole('heading', { name: 'Відновити workspace?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Відновити', exact: true }).click();
-  await saved(page);
-  await page.reload();
-  await expect(page.getByRole('button', { name: /Rust docs.*rust-lang/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Тимчасовий/ })).toHaveCount(0);
-});
-
-test('invalid import cannot overwrite existing data', async ({ page }) => {
-  await start(page);
-  await page
-    .locator('input[type=file]')
-    .nth(0)
-    .setInputFiles({
-      name: 'bad.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from('{"version":999}'),
-    });
-  await expect(page.getByText(/Імпорт скасовано/)).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'Мій workspace', exact: true })).toBeVisible();
 });
 
 test('deleting one project preserves another project', async ({ page }) => {
@@ -162,9 +98,12 @@ test('deleting one project preserves another project', async ({ page }) => {
     .click();
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.getByRole('heading', { name: 'Мій workspace', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Другий проєкт/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Нотатки/ })).toBeVisible();
+  await expect(
+    page.locator('.search-result,.document-card').filter({ hasText: 'Нотатки' }),
+  ).toBeVisible();
 });
 
 test('Markdown preview strips executable HTML and external images', async ({ page }) => {
@@ -187,15 +126,8 @@ test('Markdown preview strips executable HTML and external images', async ({ pag
     materials: [],
     context: { projectId: 'p', tab: 'documents', documentId: 'd' },
   };
-  await page
-    .locator('input[type=file]')
-    .first()
-    .setInputFiles({
-      name: 'legacy.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(legacy)),
-    });
-  await page.getByRole('button', { name: 'Відновити', exact: true }).click();
+  await seedWorkspace(page, legacy);
+  await resumeProject(page);
   await page.getByRole('button', { name: 'Перегляд', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Безпечний текст' })).toBeVisible();
   await expect(
@@ -249,7 +181,7 @@ test('corrupt stored data shows recovery error without silently resetting data',
 
 test('storage failure is visible and retry saves the newest changes', async ({ page }) => {
   await start(page);
-  await page.getByRole('button', { name: /Нотатки/ }).click();
+  await page.locator('.document-card').filter({ hasText: 'Нотатки' }).click();
   await saved(page);
   await page.evaluate(() => {
     const original = IDBObjectStore.prototype.put;
@@ -268,6 +200,7 @@ test('storage failure is visible and retry saves the newest changes', async ({ p
   await page.getByRole('button', { name: 'Повторити', exact: true }).click();
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.getByRole('textbox', { name: 'Вміст документа' })).toHaveText(
     'Новий текст не можна втратити.',
   );

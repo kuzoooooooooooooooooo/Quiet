@@ -4,7 +4,7 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
-const MAX_SIZE: usize = 5 * 1024 * 1024;
+const MAX_SIZE: usize = 25 * 1024 * 1024;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredAttachment {
@@ -21,10 +21,10 @@ fn valid_hash(hash: &str) -> bool {
 impl Database {
     pub fn store_attachment(&self, bytes: &[u8]) -> Result<StoredAttachment, String> {
         if bytes.len() > MAX_SIZE {
-            return Err("Attachment exceeds 5 MB".into());
+            return Err("Attachment exceeds 25 MB".into());
         }
         let hash = format!("{:x}", Sha256::digest(bytes));
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
         encoder.write_all(bytes).map_err(|e| e.to_string())?;
         let compressed = encoder.finish().map_err(|e| e.to_string())?;
         let (codec, packed) = if compressed.len() < bytes.len() {
@@ -62,7 +62,7 @@ impl Database {
             .map_err(|e| e.to_string())?;
         let (codec, size, packed) = record.ok_or("Attachment is missing")?;
         if size > MAX_SIZE {
-            return Err("Attachment exceeds 5 MB".into());
+            return Err("Attachment exceeds 25 MB".into());
         }
         let bytes = match codec.as_str() {
             "gzip" => {
@@ -183,7 +183,7 @@ mod reference_tests {
         let path = std::env::temp_dir().join(format!("quiet-migrate-{}.db", std::process::id()));
         {
             let db = Database::open(&path).unwrap();
-            db.connection.execute_batch("DROP TABLE attachments; PRAGMA user_version=1; INSERT INTO state(key,value) VALUES('context','{\"projectId\":null,\"tab\":\"overview\",\"documentId\":null}');").unwrap();
+            db.connection.execute_batch("DROP TABLE attachments; DROP TABLE notes; PRAGMA user_version=1; INSERT INTO state(key,value) VALUES('context','{\"projectId\":null,\"tab\":\"overview\",\"documentId\":null}');").unwrap();
         }
         {
             let db = Database::open(&path).unwrap();
@@ -192,7 +192,7 @@ mod reference_tests {
                 db.connection
                     .query_row("PRAGMA user_version", [], |r| r.get::<_, u64>(0))
                     .unwrap(),
-                2
+                3
             );
             let stored = db.store_attachment(b"After upgrade").unwrap();
             assert_eq!(db.load_attachment(&stored.hash).unwrap(), b"After upgrade");

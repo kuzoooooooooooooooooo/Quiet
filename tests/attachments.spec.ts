@@ -1,3 +1,4 @@
+import { resumeProject } from './helpers';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -7,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 });
 async function start(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('main')).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await page.getByRole('button', { name: 'Create project', exact: true }).click();
   await page.getByLabel('Project name', { exact: true }).fill('Files');
   await page
@@ -59,7 +60,7 @@ test('attachments use compressed binary storage, deduplicate and export original
   for (const name of ['first.txt', 'same.txt']) {
     await page
       .locator('input[type=file]')
-      .nth(1)
+      .first()
       .setInputFiles({ name, mimeType: 'text/plain', buffer: original });
     await expect(page.locator('.material-row')).toContainText([name]);
     await saved(page);
@@ -71,27 +72,10 @@ test('attachments use compressed binary storage, deduplicate and export original
   expect(state.urls[0]).toMatch(/^attachment:/);
   expect(state.urls[0]).toBe(state.urls[1]);
   await page.reload();
+  await resumeProject(page);
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download first.txt', exact: true }).click();
   expect(await readFile((await (await pending).path())!)).toEqual(original);
-  await page.getByRole('button', { name: 'Backups', exact: true }).click();
-  const backupDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: /^Export workspace/ }).click();
-  const backup = JSON.parse(await readFile((await (await backupDownload).path())!, 'utf8'));
-  expect(Buffer.from(backup.materials[0].url.split(',')[1], 'base64')).toEqual(original);
-  expect(backup.materials[0].url).toMatch(/^data:application\/octet-stream;base64,/);
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await page
-    .locator('input[type=file]')
-    .first()
-    .setInputFiles({
-      name: 'backup.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(backup)),
-    });
-  await page.getByRole('button', { name: 'Restore', exact: true }).click();
-  await saved(page);
-  expect((await inspect(page)).files).toHaveLength(1);
 });
 
 test('incompressible and empty files round-trip with no extra compression overhead', async ({
@@ -105,7 +89,7 @@ test('incompressible and empty files round-trip with no extra compression overhe
   ] as const) {
     await page
       .locator('input[type=file]')
-      .nth(1)
+      .first()
       .setInputFiles({ name, mimeType: 'application/octet-stream', buffer });
     await expect(page.locator('.material-row')).toContainText([name]);
     await saved(page);
@@ -175,6 +159,7 @@ test('version-one IndexedDB files migrate without losing legacy documents or att
     fixture,
   );
   await page.goto('/');
+  await resumeProject(page);
   await expect(page.getByRole('heading', { name: 'Legacy', exact: true })).toBeVisible();
   await saved(page);
   const state = await inspect(page);
@@ -196,6 +181,7 @@ test('version-one IndexedDB files migrate without losing legacy documents or att
   ).toBeVisible();
   await saved(page);
   await page.reload();
+  await resumeProject(page);
   await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveAttribute(
     'contenteditable',
     'true',
@@ -206,7 +192,7 @@ test('corrupt file contents are reported without downloading damaged bytes', asy
   await start(page);
   await page
     .locator('input[type=file]')
-    .nth(1)
+    .first()
     .setInputFiles({ name: 'test.txt', mimeType: 'text/plain', buffer: Buffer.from('valid data') });
   await expect(page.locator('.material-row')).toHaveCount(1);
   await saved(page);

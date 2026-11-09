@@ -6,7 +6,7 @@ async function fakeUpdater(
   mode: 'available' | 'current' | 'offline' | 'download-error' | 'unconfigured' = 'available',
 ) {
   await page.addInitScript(() => localStorage.setItem('quiet.language', 'en'));
-  await page.route('**/src/updateService.ts', (route) =>
+  await page.route('**/src/updateService.ts*', (route) =>
     route.fulfill({
       contentType: 'application/javascript',
       body: `
@@ -16,7 +16,7 @@ async function fakeUpdater(
         window.updateCalls.checks++;
         if ('${mode}' === 'offline') throw new Error('Network unavailable');
         if ('${mode}' === 'current') return null;
-        return { version: '0.7.0',
+        return { version: '0.9.0',
           async download(event) {
             window.updateCalls.downloads++;
             if ('${mode}' === 'download-error') throw new Error('Invalid signature');
@@ -53,7 +53,7 @@ test('browser settings explain native updates without making update requests', a
     return route.abort();
   });
   await page.goto('/');
-  await expect(page.getByRole('main')).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
   await expect(page.getByText('Оновлення доступні у Windows-додатку.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Перевірити оновлення' })).toHaveCount(0);
@@ -66,7 +66,7 @@ test('startup check only announces updates; dismissing does not download or inst
   await fakeUpdater(page);
   await page.goto('/');
   const notice = page.locator('.update-notice');
-  await expect(notice).toContainText('Version 0.7.0 is available.');
+  await expect(notice).toContainText('Version 0.9.0 is available.');
   await notice.getByRole('button', { name: 'Dismiss update' }).click();
   await expect(notice).toHaveCount(0);
   await settings(page);
@@ -87,7 +87,7 @@ test('explicit install shows progress and keeps saved project data', async ({ pa
     .click();
   await page
     .locator('.update-notice')
-    .getByRole('button', { name: 'Version 0.7.0 is available.' })
+    .getByRole('button', { name: 'Version 0.9.0 is available.' })
     .click();
   await page.getByRole('button', { name: 'Download and install' }).click();
   await expect(page.getByRole('progressbar')).toHaveAttribute('value', '50');
@@ -96,7 +96,7 @@ test('explicit install shows progress and keeps saved project data', async ({ pa
   expect(await calls(page, 'installs')).toBe(1);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'My workspace', exact: true })).toBeVisible();
+  await expect(page.locator('.home-project')).toContainText('My workspace');
 });
 
 test('offline startup stays quiet, while a manual check reports an error and allows retry', async ({
@@ -119,7 +119,7 @@ test('a rejected download cannot reach installation', async ({ page }) => {
   await page.goto('/');
   await page
     .locator('.update-notice')
-    .getByRole('button', { name: 'Version 0.7.0 is available.' })
+    .getByRole('button', { name: 'Version 0.9.0 is available.' })
     .click();
   await page.getByRole('button', { name: 'Download and install' }).click();
   await expect(page.getByText('Could not complete the update. Try again.')).toBeVisible();
@@ -135,7 +135,7 @@ test('an up-to-date app and an unconfigured build have distinct states', async (
   await settings(page);
   await page.getByRole('button', { name: 'Check for updates' }).click();
   await expect(page.getByText('You have the latest version.')).toBeVisible();
-  await page.unroute('**/src/updateService.ts');
+  await page.unroute('**/src/updateService.ts*');
   await fakeUpdater(page, 'unconfigured');
   await page.reload();
   await settings(page);
@@ -169,7 +169,7 @@ test('unsaved changes block installation, and retry uses the already downloaded 
   await expect(page.getByRole('alert')).toBeVisible();
   await page
     .locator('.update-notice')
-    .getByRole('button', { name: 'Version 0.7.0 is available.' })
+    .getByRole('button', { name: 'Version 0.9.0 is available.' })
     .click();
   await page.getByRole('button', { name: 'Download and install' }).click();
   await expect(page.getByText('Could not complete the update. Try again.')).toBeVisible();

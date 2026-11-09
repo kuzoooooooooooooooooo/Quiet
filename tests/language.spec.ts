@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 
 async function useEnglish(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('main', { name: 'Робоча область' })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   if ((page.viewportSize()?.width ?? 1440) <= 600)
     await page.getByRole('button', { name: 'Відкрити проєкти', exact: true }).click();
   await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
@@ -35,7 +35,7 @@ test('English and appearance preferences persist independently and preserve an e
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.getByRole('main', { name: 'Workspace', exact: true })).toBeEmpty();
+  await expect(page.locator('.home-project-list')).toBeEmpty();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('en');
   await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
@@ -80,60 +80,6 @@ test('English project, document, task, preview and search flows keep user conten
     'SQLite\n\nМій перший крок',
     { useInnerText: true },
   );
-});
-
-test('backup errors, restoration counts and delete confirmations are translated', async ({
-  page,
-}) => {
-  await useEnglish(page);
-  await page
-    .locator('input[type=file]')
-    .first()
-    .setInputFiles({
-      name: 'bad.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from('{"version":99}'),
-    });
-  await expect(page.getByRole('status')).toContainText(
-    'Import canceled: Unsupported backup format.',
-  );
-  const date = '2026-11-07T10:00:00Z';
-  const workspace = {
-    version: 1,
-    projects: [{ id: 'p1', name: 'Research', description: '', tone: 'violet', createdAt: date }],
-    documents: [1, 2].map((id) => ({
-      id: `d${id}`,
-      projectId: 'p1',
-      title: `Document ${id}`,
-      content: 'Text',
-      updatedAt: date,
-    })),
-    tasks: [{ id: 't1', projectId: 'p1', title: 'Review', done: false, createdAt: date }],
-    materials: [],
-    context: { projectId: 'p1', tab: 'overview', documentId: null },
-  };
-  await page
-    .locator('input[type=file]')
-    .first()
-    .setInputFiles({
-      name: 'backup.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(workspace)),
-    });
-  await expect(page.getByRole('dialog', { name: 'Restore workspace?', exact: true })).toContainText(
-    '1 project, 2 documents, and 1 task',
-  );
-  await page.getByRole('button', { name: 'Restore', exact: true }).click();
-  await page.getByRole('button', { name: 'Project menu', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Delete project', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Delete project?', exact: true })).toContainText(
-    'Delete “Research”',
-  );
-  expect(await page.getByRole('dialog').innerText()).not.toMatch(/[\u0400-\u04ff]/);
-  await page.getByRole('button', { name: 'Keep', exact: true }).click();
-  await page.getByRole('button', { name: /^Documents/ }).click();
-  await expect(page.locator('.document-list-heading')).toContainText('2 documents');
-  await expect(page.locator('.document-meta')).toContainText('1 word');
 });
 
 test('language preference updates another open tab', async ({ page, context }) => {

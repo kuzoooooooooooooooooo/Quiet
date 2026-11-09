@@ -3,6 +3,18 @@ use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct Note {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: String,
     pub name: String,
@@ -53,6 +65,8 @@ pub struct Material {
     pub size: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stored_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_type: Option<String>,
     pub created_at: String,
 }
 
@@ -83,6 +97,8 @@ pub enum Tab {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Workspace {
     pub version: u32,
+    #[serde(default)]
+    pub notes: Vec<Note>,
     pub projects: Vec<Project>,
     pub documents: Vec<Document>,
     pub tasks: Vec<Task>,
@@ -103,6 +119,7 @@ impl Workspace {
             .chain(self.documents.iter().map(|d| &d.id))
             .chain(self.tasks.iter().map(|t| &t.id))
             .chain(self.materials.iter().map(|m| &m.id))
+            .chain(self.notes.iter().map(|n| &n.id))
         {
             if id.is_empty() || !ids.insert(id) {
                 return Err("Empty or duplicate ID".into());
@@ -110,6 +127,9 @@ impl Workspace {
         }
         if ids.len() > 50_000 {
             return Err("Too many workspace records".into());
+        }
+        if self.notes.iter().any(|note| note.title.trim().is_empty()) {
+            return Err("Empty note title".into());
         }
         let projects: HashSet<_> = self.projects.iter().map(|p| &p.id).collect();
         for (project_id, title) in self
@@ -168,7 +188,7 @@ impl Workspace {
                                         .bytes()
                                         .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
                             }))
-                        || material.size > 5 * 1024 * 1024 =>
+                        || material.size > 25 * 1024 * 1024 =>
                 {
                     return Err("Unsupported attachment".into())
                 }
