@@ -112,7 +112,7 @@ test('DOCX preview renders text, formatting and tables locally; original downloa
   await expect(page.locator('.docx-preview td')).toHaveText('Table cell');
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download file', exact: true }).click();
-  expect(await readFile((await (await pending).path())!)).toEqual(bytes);
+  expect((await readFile((await (await pending).path())!)).equals(bytes)).toBe(true);
   expect(calls).toEqual([]);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.locator('.material-row')).toContainText('DOCX');
@@ -168,7 +168,7 @@ test('files above 5 MB compress in a worker and download completely; limit rejec
   await attach(page, 'large.txt', bytes);
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download file', exact: true }).click();
-  expect(await readFile((await (await pending).path())!)).toEqual(bytes);
+  expect((await readFile((await (await pending).path())!)).equals(bytes)).toBe(true);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('input[type=file]').setInputFiles({
     name: 'too-big.bin',
@@ -197,7 +197,7 @@ test('Office preview rejects unsafe XML and oversized ZIP parts without losing t
     await expect(page.getByRole('alert')).toContainText('Could not preview');
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download file', exact: true }).click();
-    expect(await readFile((await (await pending).path())!)).toEqual(bytes);
+    expect((await readFile((await (await pending).path())!)).equals(bytes)).toBe(true);
     await page.getByRole('button', { name: 'Close', exact: true }).click();
   }
 });
