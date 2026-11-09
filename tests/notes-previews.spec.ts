@@ -202,3 +202,31 @@ test('Office preview rejects unsafe XML and oversized ZIP parts without losing t
     await page.getByRole('button', { name: 'Close', exact: true }).click();
   }
 });
+
+test('whitespace-only note and document titles remain valid after saving and reopening', async ({
+  page,
+}) => {
+  await files(page);
+  await page.locator('.sidebar-nav').getByRole('button', { name: 'Notes', exact: true }).click();
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Note title' }).fill('   ');
+  await expect(page.getByRole('textbox', { name: 'Note title' })).toHaveValue('Untitled note');
+  await page.getByRole('textbox', { name: 'Note content' }).fill('Keep this note');
+  await expect(page.locator('.save-status')).toContainText('Saved on this device');
+  await page.locator('.project-link').filter({ hasText: 'Preview project' }).click();
+  await page.getByRole('button', { name: /^Documents/ }).click();
+  await page.getByRole('button', { name: 'New document', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Document title' }).fill('   ');
+  await expect(page.getByRole('textbox', { name: 'Document title' })).toHaveValue('Untitled');
+  await page.getByRole('textbox', { name: 'Document content' }).fill('Keep this document');
+  await expect(page.locator('.save-status')).toContainText('Saved on this device');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
+  await page.locator('.sidebar-nav').getByRole('button', { name: 'Notes', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveValue('Keep this note');
+  await page.locator('.project-link').filter({ hasText: 'Preview project' }).click();
+  await page.getByRole('button', { name: /^Documents/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveText(
+    'Keep this document',
+  );
+});

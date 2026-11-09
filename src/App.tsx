@@ -1679,7 +1679,9 @@ export default function App() {
                         maxLength={200}
                         value={activeDocument.title}
                         onChange={(event) =>
-                          patchDocument({ title: event.target.value || t('Без назви') })
+                          patchDocument({
+                            title: event.target.value.trim() ? event.target.value : t('Без назви'),
+                          })
                         }
                       />
                       <div className="document-meta">

@@ -53,7 +53,9 @@ export default function Notes({
                   maxLength={200}
                   value={active.title}
                   onChange={(event) =>
-                    onChange(active.id, { title: event.target.value || t('Нова нотатка') })
+                    onChange(active.id, {
+                      title: event.target.value.trim() ? event.target.value : t('Нова нотатка'),
+                    })
                   }
                 />
                 <ActionMenu
