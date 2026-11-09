@@ -13,8 +13,8 @@
   --surface-hover: #eae7e3;
   --surface-raised: #fffefa;
   --text: #302d2e;
-  --text-secondary: #625b5d;
-  --muted: #756f70;
+  --text-secondary: #514b50;
+  --muted: #554e53;
   --line: #e9e5e1;
   --line-strong: #dad4d0;
   --accent: #756284;
@@ -51,8 +51,8 @@
   --surface-hover: #37343d;
   --surface-raised: #2a282f;
   --text: #eee9e4;
-  --text-secondary: #c4bdba;
-  --muted: #aca3a2;
+  --text-secondary: #d0c6cd;
+  --muted: #bcb2b8;
   --line: #36323a;
   --line-strong: #48414b;
   --accent: #c6afd5;
@@ -424,10 +424,9 @@ kbd {
   min-width: 0;
   width: calc(100% - var(--sidebar-width) - 32px);
   min-height: calc(100dvh - 16px);
-  border: 1px solid var(--tab-surface);
+  border: 1px solid transparent;
   border-radius: 22px;
-  background: var(--surface);
-  box-shadow: 0 8px 35px var(--shadow);
+  background: transparent;
   overflow: clip;
   transition:
     margin-left 0.16s ease,
@@ -2885,10 +2884,6 @@ kbd {
   outline: none;
 }
 
-/* The canvas spans the window; translucent surfaces reveal it without live blur. */
-.workspace-area {
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-}
 .module-picker {
   border: 0;
   padding: 0;
@@ -3259,4 +3254,18 @@ kbd {
 }
 .board-card .task-stage {
   display: none;
+}
+
+/* One canvas behind the whole layout; only reading/editing surfaces get a fill. */
+.rich-content,
+.markdown-editor,
+.markdown,
+.plain-note textarea {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px;
+}
+.sheet-scroll,
+.snippet-code {
+  background: var(--surface);
 }

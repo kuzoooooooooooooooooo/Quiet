@@ -233,7 +233,5 @@ test('new modules, board and full-window backgrounds fit mobile and both themes'
   await page.getByRole('radio', { name: 'Ocean', exact: true }).check();
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  expect(
-    await page.locator('.workspace-area').evaluate((el) => getComputedStyle(el).backgroundColor),
-  ).toMatch(/0\.7|70%/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
