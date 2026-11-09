@@ -16,6 +16,8 @@ pub struct Note {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kit: Option<crate::kit::ProjectKit>,
     pub id: String,
     pub name: String,
     pub description: String,
@@ -47,6 +49,8 @@ pub struct Document {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
     pub id: String,
     pub project_id: String,
     pub title: String,
@@ -92,6 +96,9 @@ pub enum Tab {
     Documents,
     Tasks,
     Materials,
+    Notes,
+    Snippets,
+    Tables,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -124,6 +131,18 @@ impl Workspace {
             if id.is_empty() || !ids.insert(id) {
                 return Err("Empty or duplicate ID".into());
             }
+        }
+        for project in &self.projects {
+            if let Some(kit) = &project.kit {
+                kit.validate(&mut ids)?;
+            }
+        }
+        if self
+            .tasks
+            .iter()
+            .any(|t| t.stage.as_ref().is_some_and(|s| s != "doing"))
+        {
+            return Err("Invalid task stage".into());
         }
         if ids.len() > 50_000 {
             return Err("Too many workspace records".into());

@@ -192,7 +192,7 @@ mod reference_tests {
                 db.connection
                     .query_row("PRAGMA user_version", [], |r| r.get::<_, u64>(0))
                     .unwrap(),
-                3
+                4
             );
             let stored = db.store_attachment(b"After upgrade").unwrap();
             assert_eq!(db.load_attachment(&stored.hash).unwrap(), b"After upgrade");

@@ -26,6 +26,11 @@ import { downloadBlob, isDesktop, loadWorkspace, openExternal, saveWorkspace } f
 import { useTheme } from './theme';
 import type { Theme } from './theme';
 import Notes from './Notes';
+import ProjectModules, { ModulePicker, SortControl, reorder } from './ProjectModules';
+import { arrange, getKit, enabled, defaultModules } from './projectKit';
+import type { ProjectKit, ModuleId } from './projectKit';
+import TaskBoard from './TaskBoard';
+import type { Stage } from './TaskBoard';
 import FilePreview from './FilePreview';
 import { attachmentLimit, fileType } from './attachmentLimits';
 import { backgrounds, useBackground } from './background';
@@ -44,6 +49,7 @@ type ModalState =
   | { type: 'project'; project?: Project }
   | { type: 'delete-project'; project: Project }
   | { type: 'material' }
+  | { type: 'bulk-delete' }
   | { type: 'shortcuts' }
   | { type: 'settings' }
   | { type: 'file-preview'; material: Material }
@@ -59,6 +65,9 @@ const tabIcons: Record<Tab, IconName> = {
   documents: 'file',
   tasks: 'circle',
   materials: 'link',
+  notes: 'note',
+  snippets: 'file',
+  tables: 'grid',
 };
 const resultIcons: Record<SearchResult['kind'], IconName> = {
   project: 'folder',
@@ -66,6 +75,8 @@ const resultIcons: Record<SearchResult['kind'], IconName> = {
   task: 'circle',
   material: 'link',
   note: 'note',
+  snippet: 'file',
+  table: 'grid',
 };
 const toneNames: Record<Tone, Message> = {
   green: 'Зелений',
@@ -158,17 +169,20 @@ function ProjectForm({
   onClose,
 }: {
   project?: Project;
-  onSubmit: (name: string, description: string, tone: Tone) => void;
+  onSubmit: (name: string, description: string, tone: Tone, modules: ModuleId[]) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(project?.name ?? '');
   const [description, setDescription] = useState(project?.description ?? '');
   const [tone, setTone] = useState<Tone>(project?.tone ?? 'green');
+  const [modules, setModules] = useState<ModuleId[]>(
+    project ? getKit(project).enabled : [...defaultModules],
+  );
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (name.trim()) onSubmit(name.trim(), description.trim(), tone);
+        if (name.trim()) onSubmit(name.trim(), description.trim(), tone, modules);
       }}
     >
       <label className="field">
@@ -207,6 +221,7 @@ function ProjectForm({
           </button>
         ))}
       </fieldset>
+      <ModulePicker value={modules} onChange={setModules} />
       <div className="modal-actions">
         <button type="button" className="button secondary" onClick={onClose}>
           {t('Скасувати')}
@@ -325,6 +340,7 @@ function TaskRow({
         label={t('Редагувати завдання {title}', { title: task.title })}
         onSave={onRename}
       />
+      {task.stage === 'doing' && !task.done && <span className="task-stage">{t('У роботі')}</span>}
       <button
         className="icon-button row-delete"
         title={t('Видалити завдання')}
@@ -401,15 +417,19 @@ function Search({
                 <strong>{result.title}</strong>
                 <small>
                   {result.projectId && <>{projectName(result.projectId)} · </>}
-                  {result.kind === 'note'
-                    ? t('Нотатка')
-                    : result.kind === 'project'
-                      ? t('Проєкт')
-                      : result.kind === 'document'
-                        ? t('Документ')
-                        : result.kind === 'task'
-                          ? t('Завдання')
-                          : t('Матеріал')}
+                  {result.kind === 'snippet'
+                    ? t('Фрагменти коду')
+                    : result.kind === 'table'
+                      ? t('Таблиці')
+                      : result.kind === 'note'
+                        ? t('Нотатка')
+                        : result.kind === 'project'
+                          ? t('Проєкт')
+                          : result.kind === 'document'
+                            ? t('Документ')
+                            : result.kind === 'task'
+                              ? t('Завдання')
+                              : t('Матеріал')}
                 </small>
               </span>
               <Icon name="arrow" size={16} />
@@ -446,6 +466,9 @@ export default function App() {
   const [notification, setNotification] = useState('');
   const [undo, setUndo] = useState<UndoAction | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [draggingFiles, setDraggingFiles] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'active' | 'done'>('all');
   const [preview, setPreview] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -562,6 +585,7 @@ export default function App() {
         if (!toggleSidebar()) setNotification(t('Не вдалося зберегти вигляд панелі.'));
       }
       if (event.key === 'Escape') {
+        setDraggingFiles(false);
         setSidebarOpen(false);
       }
     };
@@ -569,6 +593,16 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [modal, searchOpen, toggleSidebar]);
 
+  useEffect(() => {
+    setSelectedFiles((current) => {
+      const valid = new Set(
+        [...current].filter((id) =>
+          workspace?.materials.some((m) => m.id === id && m.kind === 'file'),
+        ),
+      );
+      return valid.size === current.size ? current : valid;
+    });
+  }, [workspace?.materials]);
   useEffect(() => {
     if (!notification) return;
     const id = setTimeout(() => setNotification(''), 4500);
@@ -583,25 +617,185 @@ export default function App() {
     return () => clearTimeout(id);
   }, [highlight, workspace?.context.tab]);
   useEffect(() => {
+    const reveal = () =>
+      document
+        .querySelector<HTMLElement>('.tabs [aria-current="page"]')
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    reveal();
+    window.addEventListener('resize', reveal);
+    return () => window.removeEventListener('resize', reveal);
+  }, [workspace?.context.tab, workspace?.context.projectId, view]);
+  useEffect(() => {
     setTaskTitle('');
     setTaskFilter('all');
+    setSelectedFiles(new Set());
+    setModal((current) => (current?.type === 'bulk-delete' ? null : current));
     setPreview(false);
   }, [workspace?.context.projectId]);
+
+  useEffect(() => {
+    if (view !== 'project' || !workspace?.context.projectId) return;
+    const p = workspace.projects.find((p) => p.id === workspace.context.projectId);
+    if (!p) return;
+    const k = getKit(p),
+      { tab, documentId } = workspace.context;
+    if (k.preferences.lastTab === tab && (k.preferences.documentId ?? null) === documentId) return;
+    update((w) =>
+      w.context.projectId !== p.id
+        ? w
+        : {
+            ...w,
+            projects: w.projects.map((x) =>
+              x.id === p.id
+                ? {
+                    ...x,
+                    kit: {
+                      ...getKit(x),
+                      preferences: {
+                        ...getKit(x).preferences,
+                        lastTab: tab,
+                        documentId: documentId ?? undefined,
+                      },
+                    },
+                  }
+                : x,
+            ),
+          },
+    );
+  }, [
+    workspace?.context.projectId,
+    workspace?.context.tab,
+    workspace?.context.documentId,
+    view,
+    update,
+  ]);
 
   const project =
     view === 'project'
       ? workspace?.projects.find((p) => p.id === workspace.context.projectId)
       : undefined;
   const tab = workspace?.context.tab ?? 'overview';
-  const documents = workspace?.documents.filter((d) => d.projectId === project?.id) ?? [];
-  const tasks = workspace?.tasks.filter((t) => t.projectId === project?.id) ?? [];
-  const materials = workspace?.materials.filter((m) => m.projectId === project?.id) ?? [];
+  const kit = project ? getKit(project) : null;
+  const documents = arrange(
+    workspace?.documents.filter((d) => d.projectId === project?.id) ?? [],
+    kit ?? getKit(),
+    'documents',
+  );
+  const tasks = arrange(
+    workspace?.tasks.filter((d) => d.projectId === project?.id) ?? [],
+    kit ?? getKit(),
+    'tasks',
+  );
+  const materials = arrange(
+    workspace?.materials.filter((d) => d.projectId === project?.id) ?? [],
+    kit ?? getKit(),
+    'materials',
+  );
   const activeDocument =
     documents.find((d) => d.id === workspace?.context.documentId) ?? documents[0];
   const completed = tasks.filter((t) => t.done).length;
   const activeTasks = tasks.filter((t) => !t.done);
   const closeModal = () => setModal(null);
 
+  function writeKit(next: ProjectKit) {
+    if (!project) return;
+    update((w) => ({
+      ...w,
+      projects: w.projects.map((p) => (p.id === project.id ? { ...p, kit: next } : p)),
+    }));
+  }
+  function moveRecord(kind: ModuleId, id: string, delta: number) {
+    if (!kit) return;
+    const rows =
+      kind === 'documents'
+        ? documents
+        : kind === 'tasks'
+          ? tasks
+          : kind === 'materials'
+            ? materials
+            : kit[kind];
+    writeKit(
+      reorder(
+        kit,
+        kind,
+        rows.map((r) => r.id),
+        id,
+        delta,
+      ),
+    );
+  }
+  function removeKitRecord(kind: 'notes' | 'snippets' | 'tables', id: string) {
+    if (!kit || !project) return;
+    const index = kit[kind].findIndex((row) => row.id === id),
+      row = kit[kind][index],
+      projectId = project.id;
+    if (!row) return;
+    writeKit({ ...kit, [kind]: kit[kind].filter((r) => r.id !== id) });
+    rememberDeletion('Запис видалено.', (w) => ({
+      ...w,
+      projects: w.projects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              kit: {
+                ...getKit(p),
+                [kind]: restoreAt<
+                  Note | import('./projectKit').Snippet | import('./projectKit').Sheet
+                >(getKit(p)[kind], row, index),
+              },
+            }
+          : p,
+      ),
+    }));
+  }
+  function setStage(id: string, stage: Stage) {
+    setHighlight(id);
+    update((w) => ({
+      ...w,
+      tasks: w.tasks.map((task) =>
+        task.id === id
+          ? { ...task, done: stage === 'done', stage: stage === 'doing' ? 'doing' : undefined }
+          : task,
+      ),
+    }));
+  }
+  function bulkRemove() {
+    const captured = capture(
+      workspace!.materials,
+      (m) => m.projectId === project?.id && m.kind === 'file' && selectedFiles.has(m.id),
+    );
+    update((w) => ({
+      ...w,
+      materials: w.materials.filter((m) => !captured.some((x) => x.item.id === m.id)),
+    }));
+    rememberDeletion('Матеріал видалено.', (w) => ({
+      ...w,
+      materials: restoreMany(
+        w.materials,
+        captured.filter((x) => w.projects.some((p) => p.id === x.item.projectId)),
+      ),
+    }));
+    setSelectedFiles(new Set());
+    setModal((current) => (current?.type === 'bulk-delete' ? null : current));
+  }
+  async function bulkDownload() {
+    if (!project) return;
+    setBulkBusy(true);
+    try {
+      const { exportFiles } = await import('./archiveExport');
+      await exportFiles(
+        materials.filter((m) => m.kind === 'file' && selectedFiles.has(m.id)),
+        project.name,
+      );
+    } catch (error) {
+      setNotification(message(error));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+  async function attachFiles(files: FileList | File[]) {
+    for (const file of Array.from(files)) await attachFile(file);
+  }
   function goHome() {
     setView('home');
     setModal(null);
@@ -611,7 +805,22 @@ export default function App() {
   }
   function selectProject(id: string) {
     setView('project');
-    update((w) => ({ ...w, context: { projectId: id, tab: 'overview', documentId: null } }));
+    update((w) => {
+      const p = w.projects.find((p) => p.id === id);
+      if (!p) return w;
+      const prefs = getKit(p).preferences;
+      const last = prefs.lastTab ?? 'overview';
+      return {
+        ...w,
+        context: {
+          projectId: id,
+          tab: last === 'overview' || enabled(p, last) ? last : 'overview',
+          documentId: w.documents.some((d) => d.projectId === id && d.id === prefs.documentId)
+            ? prefs.documentId!
+            : null,
+        },
+      };
+    });
     setSidebarOpen(false);
   }
   function selectTab(next: Tab) {
@@ -939,6 +1148,13 @@ export default function App() {
         icon: 'check',
         action: () => toggleTask(id),
       });
+    if (kind !== 'project') {
+      const kindModule = { document: 'documents', task: 'tasks', material: 'materials' } as const;
+      actions.push(
+        { label: t('Вище'), icon: 'arrow', action: () => moveRecord(kindModule[kind], id, -1) },
+        { label: t('Нижче'), icon: 'arrow', action: () => moveRecord(kindModule[kind], id, 1) },
+      );
+    }
     actions.push({
       label: t('Перейменувати'),
       icon: 'edit',
@@ -1012,6 +1228,31 @@ export default function App() {
   }
 
   function selectResult(result: SearchResult) {
+    if (result.projectId && ['note', 'snippet', 'table'].includes(result.kind)) {
+      const kind =
+        result.kind === 'note' ? 'notes' : result.kind === 'snippet' ? 'snippets' : 'tables';
+      setView('project');
+      update((w) => ({
+        ...w,
+        context: { projectId: result.projectId, tab: kind, documentId: null },
+        projects: w.projects.map((p) =>
+          p.id === result.projectId
+            ? {
+                ...p,
+                kit: {
+                  ...getKit(p),
+                  preferences: {
+                    ...getKit(p).preferences,
+                    active: { ...getKit(p).preferences.active, [kind]: result.id },
+                  },
+                },
+              }
+            : p,
+        ),
+      }));
+      setSearchOpen(false);
+      return;
+    }
     if (result.kind === 'note') {
       setNoteId(result.id);
       setView('notes');
@@ -1063,6 +1304,25 @@ export default function App() {
   return (
     <div
       className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) {
+          event.preventDefault();
+          if (project && enabled(project, 'materials') && !modal) setDraggingFiles(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingFiles(false);
+      }}
+      onDrop={(event) => {
+        if (event.dataTransfer.types.includes('Files')) {
+          event.preventDefault();
+          setDraggingFiles(false);
+          if (project && enabled(project, 'materials') && !modal) {
+            selectTab('materials');
+            void attachFiles(event.dataTransfer.files);
+          }
+        }
+      }}
       onContextMenu={(event) => {
         if (recordContext(event.target as HTMLElement, event.clientX, event.clientY))
           event.preventDefault();
@@ -1075,6 +1335,7 @@ export default function App() {
         }
       }}
     >
+      {draggingFiles && <div className="file-drop-overlay">{t('Перетягни файли сюди')}</div>}
       {sidebarOpen && (
         <button
           className="sidebar-backdrop"
@@ -1306,31 +1567,44 @@ export default function App() {
                 {project.description && <p>{project.description}</p>}
               </div>
               <div className="project-actions">
-                <ActionMenu
-                  key={`create-${project.id}`}
-                  label={t('Створити')}
-                  primary
-                  items={[
-                    { label: t('Нове завдання'), icon: 'circle', action: focusTask },
-                    { label: t('Новий документ'), icon: 'file', action: createDocument },
-                    {
-                      label: t('Додати посилання'),
-                      icon: 'link',
-                      action: () => {
-                        selectTab('materials');
-                        setModal({ type: 'material' });
+                {getKit(project).enabled.some((m) =>
+                  ['tasks', 'documents', 'materials'].includes(m),
+                ) && (
+                  <ActionMenu
+                    key={`create-${project.id}`}
+                    label={t('Створити')}
+                    primary
+                    items={[
+                      { label: t('Нове завдання'), icon: 'circle' as const, action: focusTask },
+                      { label: t('Новий документ'), icon: 'file' as const, action: createDocument },
+                      {
+                        label: t('Додати посилання'),
+                        icon: 'link' as const,
+                        action: () => {
+                          selectTab('materials');
+                          setModal({ type: 'material' });
+                        },
                       },
-                    },
-                    {
-                      label: t('Файл'),
-                      icon: 'upload',
-                      action: () => {
-                        selectTab('materials');
-                        fileInput.current?.click();
+                      {
+                        label: t('Файл'),
+                        icon: 'upload' as const,
+                        action: () => {
+                          selectTab('materials');
+                          fileInput.current?.click();
+                        },
                       },
-                    },
-                  ]}
-                />
+                    ].filter((item) =>
+                      enabled(
+                        project,
+                        item.icon === 'circle'
+                          ? 'tasks'
+                          : item.icon === 'file'
+                            ? 'documents'
+                            : 'materials',
+                      ),
+                    )}
+                  />
+                )}
                 <ActionMenu
                   key={`project-${project.id}`}
                   label={t('Меню проєкту')}
@@ -1351,156 +1625,236 @@ export default function App() {
               </div>
             </div>
             <nav className="tabs" aria-label={t('Розділи проєкту')}>
-              {tabs.map((item) => (
-                <button
-                  key={item.id}
-                  className={tab === item.id ? 'active' : ''}
-                  aria-current={tab === item.id ? 'page' : undefined}
-                  onClick={() => selectTab(item.id)}
-                >
-                  <Icon name={tabIcons[item.id]} size={16} />
-                  {t(item.label)}
-                  {item.id !== 'overview' &&
-                    (item.id === 'documents'
-                      ? documents.length
-                      : item.id === 'tasks'
-                        ? activeTasks.length
-                        : materials.length) > 0 && (
+              {tabs
+                .filter((item) => item.id === 'overview' || enabled(project, item.id))
+                .map((item) => (
+                  <button
+                    key={item.id}
+                    className={tab === item.id ? 'active' : ''}
+                    aria-current={tab === item.id ? 'page' : undefined}
+                    onClick={() => selectTab(item.id)}
+                  >
+                    <Icon name={tabIcons[item.id]} size={16} />
+                    {t(item.label)}
+                    {{
+                      documents: documents.length,
+                      tasks: activeTasks.length,
+                      materials: materials.length,
+                      notes: kit!.notes.length,
+                      snippets: kit!.snippets.length,
+                      tables: kit!.tables.length,
+                      overview: 0,
+                    }[item.id] > 0 && (
                       <span className="tab-count">
-                        {item.id === 'documents'
-                          ? documents.length
-                          : item.id === 'tasks'
-                            ? activeTasks.length
-                            : materials.length}
+                        {
+                          {
+                            documents: documents.length,
+                            tasks: activeTasks.length,
+                            materials: materials.length,
+                            notes: kit!.notes.length,
+                            snippets: kit!.snippets.length,
+                            tables: kit!.tables.length,
+                            overview: 0,
+                          }[item.id]
+                        }
                       </span>
                     )}
-                </button>
-              ))}
+                  </button>
+                ))}
             </nav>
 
             {tab === 'overview' && (
               <div className="overview-content">
                 <div className="overview-grid">
-                  <section className="panel">
-                    <div className="section-heading">
-                      <h2>
-                        <Icon name="circle" size={17} />
+                  {enabled(project, 'tasks') && (
+                    <>
+                      {' '}
+                      <section className="panel">
+                        <div className="section-heading">
+                          <h2>
+                            <Icon name="circle" size={17} />
 
-                        {t('Завдання')}
-                      </h2>
-                      <span className="muted small">
-                        {completed} / {tasks.length}
-                      </span>
-                    </div>
-                    <div className="task-preview">
-                      {tasks.length ? (
-                        [...activeTasks, ...tasks.filter((t) => t.done)]
-                          .slice(0, 5)
-                          .map((task) => (
-                            <TaskRow
-                              key={task.id}
-                              task={task}
-                              onToggle={() => toggleTask(task.id)}
-                              onDelete={() => deleteTask(task.id)}
-                              onRename={(value) => renameTask(task.id, value)}
-                              highlight={highlight === task.id}
-                            />
-                          ))
-                      ) : (
-                        <p className="inline-empty">{t('Немає завдань')}</p>
-                      )}
-                    </div>
-                    <button className="panel-add" onClick={focusTask}>
-                      <Icon name="plus" size={16} />
+                            {t('Завдання')}
+                          </h2>
+                          <span className="muted small">
+                            {completed} / {tasks.length}
+                          </span>
+                        </div>
+                        <div className="task-preview">
+                          {tasks.length ? (
+                            [...activeTasks, ...tasks.filter((t) => t.done)]
+                              .slice(0, 5)
+                              .map((task) => (
+                                <TaskRow
+                                  key={task.id}
+                                  task={task}
+                                  onToggle={() => toggleTask(task.id)}
+                                  onDelete={() => deleteTask(task.id)}
+                                  onRename={(value) => renameTask(task.id, value)}
+                                  highlight={highlight === task.id}
+                                />
+                              ))
+                          ) : (
+                            <p className="inline-empty">{t('Немає завдань')}</p>
+                          )}
+                        </div>
+                        <button className="panel-add" onClick={focusTask}>
+                          <Icon name="plus" size={16} />
 
-                      {t('Додати завдання')}
-                    </button>
-                  </section>
-                  <section className="panel">
-                    <div className="section-heading">
-                      <h2>
-                        <Icon name="file" size={17} />
+                          {t('Додати завдання')}
+                        </button>
+                      </section>
+                    </>
+                  )}
+                  {enabled(project, 'documents') && (
+                    <>
+                      {' '}
+                      <section className="panel">
+                        <div className="section-heading">
+                          <h2>
+                            <Icon name="file" size={17} />
 
-                        {t('Документи')}
-                      </h2>
-                      <button
-                        className="icon-button"
-                        aria-label={t('Створити документ')}
-                        onClick={createDocument}
-                      >
-                        <Icon name="plus" size={17} />
-                      </button>
-                    </div>
-                    <div className="document-preview">
-                      {documents.length ? (
-                        [...documents]
-                          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-                          .slice(0, 4)
-                          .map((doc) => (
-                            <button
-                              key={doc.id}
-                              data-context-kind="document"
-                              data-context-id={doc.id}
-                              className="document-card"
-                              onClick={() => openDocument(doc.id)}
-                            >
-                              <span className="document-icon">
-                                <Icon name="file" size={19} />
-                              </span>
-                              <span>
-                                <strong>{doc.title}</strong>
-                                <small>
-                                  {documentText(doc)
-                                    .split('\n')
-                                    .find((line) => line.trim() && !line.startsWith('#'))
-                                    ?.trim()
-                                    .replace(/[*_`]/g, '')
-                                    .slice(0, 85) || shortDate(doc.updatedAt)}
-                                </small>
-                              </span>
-                              <Icon name="chevron" size={15} />
-                            </button>
-                          ))
-                      ) : (
-                        <p className="inline-empty">{t('Немає документів')}</p>
-                      )}
-                    </div>
-                    <button className="panel-add" onClick={createDocument}>
-                      <Icon name="plus" size={16} />
+                            {t('Документи')}
+                          </h2>
+                          <button
+                            className="icon-button"
+                            aria-label={t('Створити документ')}
+                            onClick={createDocument}
+                          >
+                            <Icon name="plus" size={17} />
+                          </button>
+                        </div>
+                        <div className="document-preview">
+                          {documents.length ? (
+                            [...documents]
+                              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+                              .slice(0, 4)
+                              .map((doc) => (
+                                <button
+                                  key={doc.id}
+                                  data-context-kind="document"
+                                  data-context-id={doc.id}
+                                  className="document-card"
+                                  onClick={() => openDocument(doc.id)}
+                                >
+                                  <span className="document-icon">
+                                    <Icon name="file" size={19} />
+                                  </span>
+                                  <span>
+                                    <strong>{doc.title}</strong>
+                                    <small>
+                                      {documentText(doc)
+                                        .split('\n')
+                                        .find((line) => line.trim() && !line.startsWith('#'))
+                                        ?.trim()
+                                        .replace(/[*_`]/g, '')
+                                        .slice(0, 85) || shortDate(doc.updatedAt)}
+                                    </small>
+                                  </span>
+                                  <Icon name="chevron" size={15} />
+                                </button>
+                              ))
+                          ) : (
+                            <p className="inline-empty">{t('Немає документів')}</p>
+                          )}
+                        </div>
+                        <button className="panel-add" onClick={createDocument}>
+                          <Icon name="plus" size={16} />
 
-                      {t('Новий документ')}
-                    </button>
-                  </section>
+                          {t('Новий документ')}
+                        </button>
+                      </section>
+                    </>
+                  )}
                 </div>
-                <section className="materials-summary">
-                  <div className="summary-icon">
-                    <Icon name="link" size={21} />
-                  </div>
-                  <div>
-                    <h3>{t('Матеріали')}</h3>
-                    <p>
-                      {materials.length
-                        ? formatCount('material', materials.length)
-                        : t('Немає матеріалів')}
-                    </p>
-                  </div>
-                  <button className="button secondary" onClick={() => selectTab('materials')}>
-                    {materials.length ? t('Відкрити матеріали') : t('Додати матеріали')}
-                    <Icon name="arrow" size={15} />
-                  </button>
-                </section>
+                {enabled(project, 'materials') && (
+                  <section className="materials-summary">
+                    <div className="summary-icon">
+                      <Icon name="link" size={21} />
+                    </div>
+                    <div>
+                      <h3>{t('Матеріали')}</h3>
+                      <p>
+                        {materials.length
+                          ? formatCount('material', materials.length)
+                          : t('Немає матеріалів')}
+                      </p>
+                    </div>
+                    <button className="button secondary" onClick={() => selectTab('materials')}>
+                      {materials.length ? t('Відкрити матеріали') : t('Додати матеріали')}
+                      <Icon name="arrow" size={15} />
+                    </button>
+                  </section>
+                )}
+                <div className="module-launchers">
+                  {tabs
+                    .filter(
+                      (x) =>
+                        ['notes', 'snippets', 'tables'].includes(x.id) &&
+                        enabled(project, x.id as ModuleId),
+                    )
+                    .map((x) => (
+                      <button className="home-project" key={x.id} onClick={() => selectTab(x.id)}>
+                        <Icon name={tabIcons[x.id]} />
+                        {t(x.label)}
+                      </button>
+                    ))}
+                </div>
               </div>
             )}
 
-            {tab === 'tasks' && (
+            {tab !== 'overview' && !enabled(project, tab) && (
+              <div className="empty-state">
+                <p>{t('Модуль прихований')}</p>
+                <button
+                  className="button secondary"
+                  onClick={() => writeKit({ ...kit!, enabled: [...kit!.enabled, tab] })}
+                >
+                  {t('Увімкнути')}
+                </button>
+              </div>
+            )}
+            {(['notes', 'snippets', 'tables'] as const).map(
+              (kind) =>
+                tab === kind &&
+                enabled(project, kind) && (
+                  <ProjectModules
+                    key={project.id + kind}
+                    kind={kind}
+                    kit={kit!}
+                    onChange={writeKit}
+                    onRemove={removeKitRecord}
+                    notify={setNotification}
+                  />
+                ),
+            )}
+            {tab === 'tasks' && enabled(project, 'tasks') && (
               <section className="tab-content">
                 <div className="content-heading">
                   <div>
                     <h2>{t('Завдання')}</h2>
                   </div>
-                  <span className="task-progress">
-                    {t('Виконано {done} із {total}', { done: completed, total: tasks.length })}
-                  </span>
+                  <div className="task-view-controls">
+                    <div className="segmented">
+                      {(['list', 'board'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          aria-pressed={(kit!.preferences.taskView ?? 'list') === mode}
+                          onClick={() =>
+                            writeKit({
+                              ...kit!,
+                              preferences: { ...kit!.preferences, taskView: mode },
+                            })
+                          }
+                        >
+                          {t(mode === 'list' ? 'Список' : 'Дошка')}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="task-progress">
+                      {t('Виконано {done} із {total}', { done: completed, total: tasks.length })}
+                    </span>
+                  </div>
                 </div>
                 <form className="add-task-form" onSubmit={addTask}>
                   <Icon name="plus" size={19} />
@@ -1517,6 +1871,18 @@ export default function App() {
                   </button>
                 </form>
                 <div className="filter-bar" aria-label={t('Фільтр завдань')}>
+                  <SortControl
+                    value={kit!.preferences.sort?.tasks ?? 'manual'}
+                    onChange={(sort) =>
+                      writeKit({
+                        ...kit!,
+                        preferences: {
+                          ...kit!.preferences,
+                          sort: { ...kit!.preferences.sort, tasks: sort },
+                        },
+                      })
+                    }
+                  />
                   {(
                     [
                       { id: 'all', label: t('Усі') },
@@ -1534,22 +1900,43 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <div className="task-list">
-                  {tasks
-                    .filter(
+                {kit!.preferences.taskView === 'board' ? (
+                  <TaskBoard
+                    tasks={tasks.filter(
                       (t) => taskFilter === 'all' || (taskFilter === 'done' ? t.done : !t.done),
-                    )
-                    .map((task) => (
+                    )}
+                    onMove={setStage}
+                    render={(task) => (
                       <TaskRow
-                        key={task.id}
                         task={task}
                         onToggle={() => toggleTask(task.id)}
                         onDelete={() => deleteTask(task.id)}
                         onRename={(value) => renameTask(task.id, value)}
                         highlight={highlight === task.id}
                       />
-                    ))}
-                </div>
+                    )}
+                  />
+                ) : (
+                  <>
+                    {' '}
+                    <div className="task-list">
+                      {tasks
+                        .filter(
+                          (t) => taskFilter === 'all' || (taskFilter === 'done' ? t.done : !t.done),
+                        )
+                        .map((task) => (
+                          <TaskRow
+                            key={task.id}
+                            task={task}
+                            onToggle={() => toggleTask(task.id)}
+                            onDelete={() => deleteTask(task.id)}
+                            onRename={(value) => renameTask(task.id, value)}
+                            highlight={highlight === task.id}
+                          />
+                        ))}
+                    </div>
+                  </>
+                )}
                 {!tasks.filter(
                   (t) => taskFilter === 'all' || (taskFilter === 'done' ? t.done : !t.done),
                 ).length && (
@@ -1572,10 +1959,22 @@ export default function App() {
               </section>
             )}
 
-            {tab === 'documents' && (
+            {tab === 'documents' && enabled(project, 'documents') && (
               <section className="documents-layout">
                 <aside className="document-list" aria-label={t('Документи проєкту')}>
                   <div className="document-list-heading">
+                    <SortControl
+                      value={kit!.preferences.sort?.documents ?? 'manual'}
+                      onChange={(sort) =>
+                        writeKit({
+                          ...kit!,
+                          preferences: {
+                            ...kit!.preferences,
+                            sort: { ...kit!.preferences.sort, documents: sort },
+                          },
+                        })
+                      }
+                    />
                     <span>{formatCount('document', documents.length)}</span>
                     <button
                       className="icon-button"
@@ -1731,7 +2130,7 @@ export default function App() {
               </section>
             )}
 
-            {tab === 'materials' && (
+            {tab === 'materials' && enabled(project, 'materials') && (
               <section className="tab-content">
                 <div className="content-heading">
                   <div>
@@ -1754,56 +2153,127 @@ export default function App() {
                   </div>
                 </div>
                 {materials.length ? (
-                  <div className="material-list">
-                    {materials.map((material) => (
-                      <div
-                        id={`item-${material.id}`}
-                        key={material.id}
-                        data-context-kind="material"
-                        data-context-id={material.id}
-                        tabIndex={0}
-                        className={`material-row ${highlight === material.id ? 'highlight' : ''}`}
-                      >
-                        <span className="material-icon">
-                          <Icon name={material.kind === 'link' ? 'link' : 'file'} size={21} />
-                        </span>
-                        <button className="material-open" onClick={() => openMaterial(material)}>
-                          <strong>{material.title}</strong>
-                          <small>
-                            {material.kind === 'link'
-                              ? new URL(material.url).hostname
-                              : `${fileType(material).toUpperCase()} · ${formatSize(material.size)}`}{' '}
-                            · {shortDate(material.createdAt)}
-                          </small>
-                        </button>
-                        <button
-                          className="icon-button"
-                          aria-label={
-                            material.kind === 'link'
-                              ? t('Відкрити {title}', { title: material.title })
-                              : t('Завантажити {title}', { title: material.title })
+                  <>
+                    <div className="collection-tools">
+                      <SortControl
+                        value={kit!.preferences.sort?.materials ?? 'manual'}
+                        onChange={(sort) =>
+                          writeKit({
+                            ...kit!,
+                            preferences: {
+                              ...kit!.preferences,
+                              sort: { ...kit!.preferences.sort, materials: sort },
+                            },
+                          })
+                        }
+                      />
+                      <label className="select-files">
+                        <input
+                          type="checkbox"
+                          aria-label={t('Вибрати всі файли')}
+                          checked={
+                            materials.some((m) => m.kind === 'file') &&
+                            materials
+                              .filter((m) => m.kind === 'file')
+                              .every((m) => selectedFiles.has(m.id))
                           }
-                          onClick={() =>
-                            material.kind === 'file'
-                              ? downloadMaterial(material)
-                              : openMaterial(material)
+                          onChange={(e) =>
+                            setSelectedFiles(
+                              e.target.checked
+                                ? new Set(
+                                    materials.filter((m) => m.kind === 'file').map((m) => m.id),
+                                  )
+                                : new Set(),
+                            )
                           }
+                        />
+                        {t('Вибрати всі файли')}
+                      </label>
+                      {selectedFiles.size > 0 && (
+                        <>
+                          <button
+                            className="button secondary"
+                            disabled={bulkBusy}
+                            onClick={() => void bulkDownload()}
+                          >
+                            {t('Завантажити вибрані')}
+                          </button>
+                          <button
+                            className="button secondary"
+                            disabled={bulkBusy}
+                            onClick={() => setModal({ type: 'bulk-delete' })}
+                          >
+                            {t('Видалити вибрані')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <div className="material-list">
+                      {materials.map((material) => (
+                        <div
+                          id={`item-${material.id}`}
+                          key={material.id}
+                          data-context-kind="material"
+                          data-context-id={material.id}
+                          tabIndex={0}
+                          className={`material-row ${highlight === material.id ? 'highlight' : ''}`}
                         >
-                          <Icon
-                            name={material.kind === 'link' ? 'external' : 'download'}
-                            size={16}
-                          />
-                        </button>
-                        <button
-                          className="icon-button row-delete"
-                          aria-label={t('Видалити матеріал {title}', { title: material.title })}
-                          onClick={() => deleteMaterial(material)}
-                        >
-                          <Icon name="trash" size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                          {material.kind === 'file' && (
+                            <input
+                              type="checkbox"
+                              aria-label={t('Вибрати {title}', { title: material.title })}
+                              checked={selectedFiles.has(material.id)}
+                              onChange={(e) =>
+                                setSelectedFiles((current) => {
+                                  const next = new Set(current);
+                                  if (e.target.checked) next.add(material.id);
+                                  else next.delete(material.id);
+                                  return next;
+                                })
+                              }
+                            />
+                          )}
+                          <span className="material-icon">
+                            <Icon name={material.kind === 'link' ? 'link' : 'file'} size={21} />
+                          </span>
+                          <button className="material-open" onClick={() => openMaterial(material)}>
+                            <strong>{material.title}</strong>
+                            <small>
+                              {material.kind === 'link'
+                                ? new URL(material.url).hostname
+                                : `${fileType(material).toUpperCase()} · ${formatSize(material.size)}`}{' '}
+                              · {shortDate(material.createdAt)}
+                            </small>
+                          </button>
+                          <button
+                            className="icon-button"
+                            aria-label={
+                              material.kind === 'link'
+                                ? t('Відкрити {title}', { title: material.title })
+                                : t('Завантажити {title}', { title: material.title })
+                            }
+                            onClick={() =>
+                              material.kind === 'file'
+                                ? downloadMaterial(material)
+                                : openMaterial(material)
+                            }
+                          >
+                            <Icon
+                              name={material.kind === 'link' ? 'external' : 'download'}
+                              size={16}
+                            />
+                          </button>
+                          <button
+                            className="icon-button row-delete"
+                            aria-label={t('Видалити матеріал {title}', { title: material.title })}
+                            onClick={() => deleteMaterial(material)}
+                          >
+                            <Icon name="trash" size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <Empty icon="link" title={t('Немає матеріалів')} text="">
                     <button
@@ -1825,8 +2295,11 @@ export default function App() {
       <input
         type="file"
         ref={fileInput}
+        multiple
         hidden
-        onChange={(event) => void attachFile(event.target.files?.[0])}
+        onChange={(event) => {
+          if (event.target.files) void attachFiles(event.target.files);
+        }}
       />
       <div className="toast-stack">
         {undo && (
@@ -1858,6 +2331,19 @@ export default function App() {
           onSelect={selectResult}
         />
       )}
+      {modal?.type === 'bulk-delete' && (
+        <Modal title={t('Видалити вибрані')} onClose={() => setModal(null)}>
+          <p>{t('Вибрані файли буде видалено.')}</p>
+          <div className="modal-actions">
+            <button className="button secondary" onClick={() => setModal(null)}>
+              {t('Скасувати')}
+            </button>
+            <button className="button danger" onClick={bulkRemove}>
+              {t('Видалити вибрані')}
+            </button>
+          </div>
+        </Modal>
+      )}
       {modal?.type === 'project' && (
         <Modal
           title={modal.project ? t('Редагувати проєкт') : t('Новий проєкт')}
@@ -1866,9 +2352,11 @@ export default function App() {
           <ProjectForm
             project={modal.project}
             onClose={closeModal}
-            onSubmit={(name, description, tone) => {
+            onSubmit={(name, description, tone, modules) => {
               const existing = modal.project;
               const p: Project = {
+                ...existing,
+                kit: { ...(existing ? getKit(existing) : getKit()), enabled: modules },
                 id: existing?.id ?? uid(),
                 name,
                 description,
@@ -1880,7 +2368,12 @@ export default function App() {
                 projects: existing
                   ? w.projects.map((item) => (item.id === p.id ? p : item))
                   : [...w.projects, p],
-                context: { projectId: p.id, tab: 'overview', documentId: null },
+                context:
+                  existing &&
+                  w.context.projectId === p.id &&
+                  (w.context.tab === 'overview' || modules.includes(w.context.tab))
+                    ? w.context
+                    : { projectId: p.id, tab: 'overview', documentId: null },
               }));
               closeModal();
               setSidebarOpen(false);

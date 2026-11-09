@@ -9,7 +9,7 @@ export async function seedWorkspace(page: Page, data: unknown) {
   await page.evaluate(
     (data) =>
       new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('quiet-workspace', 2);
+        const request = indexedDB.open('quiet-workspace');
         request.onupgradeneeded = () => {
           for (const name of ['workspace', 'attachments'])
             if (!request.result.objectStoreNames.contains(name))

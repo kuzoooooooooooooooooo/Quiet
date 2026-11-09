@@ -1,5 +1,6 @@
 pub mod attachments;
 pub mod database;
+pub mod kit;
 pub mod model;
 
 #[cfg(feature = "desktop")]
