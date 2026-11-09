@@ -1269,14 +1269,12 @@ kbd {
   min-width: 0;
 }
 .search-results {
-  min-height: 190px;
   max-height: 380px;
   overflow: auto;
   padding-top: 15px;
 }
-.search-results .eyebrow {
-  font-size: 10px;
-  padding: 2px 8px 11px;
+.search-results:empty {
+  padding: 0;
 }
 .search-result {
   display: flex;

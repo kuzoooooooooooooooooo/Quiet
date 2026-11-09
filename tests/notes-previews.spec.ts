@@ -45,6 +45,7 @@ test('plain notes are separate, persist, search, rename, delete and undo; launch
   await page.keyboard.press('Control+k');
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('.search-results button,kbd,footer')).toHaveCount(0);
+  expect(await dialog.locator('.search-results').evaluate((el) => el.clientHeight)).toBe(0);
   await page.getByRole('textbox', { name: 'Search workspace' }).press('Enter');
   await expect(dialog).toHaveCount(1);
   await page.getByRole('textbox', { name: 'Search workspace' }).fill('Kyoto');
