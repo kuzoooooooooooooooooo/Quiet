@@ -189,6 +189,8 @@ test('documents, tasks and materials expose rename and delete through right-clic
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.locator('.task-row').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Mark complete' }).click();
+  await expect(page.getByRole('checkbox', { name: 'A task' })).toBeHidden();
+  await page.locator('.completed-tasks > summary').click();
   await expect(page.getByRole('checkbox', { name: 'A task' })).toBeChecked();
   await page.locator('.task-row').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();

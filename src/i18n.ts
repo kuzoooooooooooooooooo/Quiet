@@ -2,6 +2,21 @@ import { useSyncExternalStore } from 'react';
 
 // Source-language keys keep this small catalog readable without a runtime dependency.
 const english = {
+  'Пошук проєктів': 'Search projects',
+  'Сортування проєктів': 'Sort projects',
+  'Нещодавно відкриті': 'Recently opened',
+  'Вигляд проєктів': 'Project view',
+  Картки: 'Cards',
+  'Дії проєкту {name}': 'Project actions: {name}',
+  'Автоформатування документів': 'Automatic document formatting',
+  'Перетворювати #, -, 1. і ** під час введення.': 'Convert #, -, 1. and ** as you type.',
+  'Показувати загальні нотатки': 'Show personal notes',
+  'Не вдалося зберегти налаштування.': 'Could not save preferences.',
+  Рядки: 'Rows',
+  Стовпці: 'Columns',
+  'Створити таблицю': 'Create table',
+  'Розміри таблиці': 'Table dimensions',
+
   'Запис видалено.': 'Record deleted.',
   Видалити: 'Delete',
   'Вибери файли загальним розміром до 100 МБ.':

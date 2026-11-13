@@ -67,12 +67,13 @@ test('English project, document, task, preview and search flows keep user conten
   await page.getByRole('textbox', { name: 'Search workspace', exact: true }).fill('To do');
   await expect(page.getByRole('button', { name: /Зібрати прототип/ })).toBeVisible();
   await page.getByRole('textbox', { name: 'Search workspace', exact: true }).press('Enter');
-  await page.getByRole('checkbox', { name: 'Зібрати прототип', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Зібрати прототип', exact: true }).click();
   await expect(page.getByText('1 of 1 completed', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('uk');
   await page.getByRole('button', { name: 'Закрити', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Мій продукт', exact: true })).toBeVisible();
+  await page.locator('.completed-tasks > summary').click();
   await expect(page.getByRole('checkbox', { name: 'Зібрати прототип', exact: true })).toBeChecked();
   await page.getByRole('button', { name: /^Документи/ }).click();
   await expect(page.getByRole('textbox', { name: 'Назва документа' })).toHaveValue('Власний план');

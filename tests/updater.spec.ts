@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 async function fakeUpdater(
   page: Page,
   mode: 'available' | 'current' | 'offline' | 'download-error' | 'unconfigured' = 'available',
+  holdDownload = false,
 ) {
   await page.addInitScript(() => localStorage.setItem('quiet.language', 'en'));
   await page.route('**/src/updateService.ts*', (route) =>
@@ -22,7 +23,8 @@ async function fakeUpdater(
             if ('${mode}' === 'download-error') throw new Error('Invalid signature');
             event({ event:'Started', data:{contentLength:100} });
             event({ event:'Progress', data:{chunkLength:50} });
-            await new Promise(resolve => setTimeout(resolve, 250));
+            if (${holdDownload}) await new Promise(resolve => { window.finishUpdateDownload = resolve; });
+            else await new Promise(resolve => setTimeout(resolve, 250));
             event({ event:'Finished' });
           },
           async install() {
@@ -77,7 +79,7 @@ test('startup check only announces updates; dismissing does not download or inst
 });
 
 test('explicit install shows progress and keeps saved project data', async ({ page }) => {
-  await fakeUpdater(page);
+  await fakeUpdater(page, 'available', true);
   await page.goto('/');
   await page.getByRole('button', { name: 'Create project', exact: true }).click();
   await page.getByLabel('Project name', { exact: true }).fill('My workspace');
@@ -91,6 +93,9 @@ test('explicit install shows progress and keeps saved project data', async ({ pa
     .click();
   await page.getByRole('button', { name: 'Download and install' }).click();
   await expect(page.getByRole('progressbar')).toHaveAttribute('value', '50');
+  await page.evaluate(() =>
+    (window as unknown as { finishUpdateDownload: () => void }).finishUpdateDownload(),
+  );
   await expect(page.getByText('Update installed. Open Quiet again.')).toBeVisible();
   expect(await calls(page, 'downloads')).toBe(1);
   expect(await calls(page, 'installs')).toBe(1);
