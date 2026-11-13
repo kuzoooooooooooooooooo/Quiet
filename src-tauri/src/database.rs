@@ -19,7 +19,7 @@ impl Database {
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|e| e.to_string())?;
-        if version > 4 {
+        if version > 5 {
             return Err("Database was created by a newer version of Quiet".into());
         }
         if version == 0 {
@@ -50,6 +50,11 @@ impl Database {
         if version < 4 {
             connection
                 .execute_batch("PRAGMA user_version=4;")
+                .map_err(|e| e.to_string())?;
+        }
+        if version < 5 {
+            connection
+                .execute_batch("PRAGMA user_version=5;")
                 .map_err(|e| e.to_string())?;
         }
         Ok(Self { connection })
@@ -205,6 +210,7 @@ mod tests {
         Workspace {
             version: 1,
             notes: vec![Note {
+                format: None,
                 id: "n1".into(),
                 title: "Personal".into(),
                 content: "Standalone note\nSecond line".into(),
@@ -401,9 +407,41 @@ mod tests {
                 db.connection
                     .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
                     .unwrap(),
-                4
+                5
             );
         }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn formatted_notes_survive_schema_four_upgrade_and_reopen() {
+        let path = std::env::temp_dir().join(format!("quiet-rich-notes-{}.db", std::process::id()));
+        let mut expected = fixture();
+        {
+            let mut db = Database::open(&path).unwrap();
+            db.save(&expected).unwrap();
+            db.connection
+                .execute_batch("PRAGMA user_version=4;")
+                .unwrap();
+        }
+        {
+            let mut db = Database::open(&path).unwrap();
+            assert_eq!(db.load().unwrap(), Some(expected.clone()));
+            expected.notes[0].content = "<p>Old line<br><strong>Bold line</strong></p>".into();
+            expected.notes[0].format = Some("html".into());
+            expected.projects[0].kit = Some(serde_json::from_value(serde_json::json!({
+                "enabled":["notes"], "notes":[{"id":"pn-rich", "title":"Project note", "content":"<h2>Heading</h2>","format":"html","createdAt":"2026-11-13T10:00:00Z","updatedAt":"2026-11-13T10:00:00Z"}],
+                "snippets":[], "tables":[], "preferences":{}
+            })).unwrap());
+            db.save(&expected).unwrap();
+            let mut invalid = expected.clone();
+            invalid.notes[0].format = Some("unknown".into());
+            assert!(db.save(&invalid).is_err());
+        }
+        assert_eq!(
+            Database::open(&path).unwrap().load().unwrap(),
+            Some(expected)
+        );
         std::fs::remove_file(path).unwrap();
     }
 

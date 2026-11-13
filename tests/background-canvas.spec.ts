@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -83,13 +84,14 @@ for (const theme of ['light', 'dark'] as const) {
   test(`${theme}: all backgrounds cover Home continuously on desktop, compact rail and mobile`, async ({
     page,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await page.addInitScript((theme) => {
       localStorage.setItem('quiet.language', 'en');
       localStorage.setItem('quiet.theme', theme);
     }, theme);
     await page.goto('/');
     await settings(page);
+    await settingsSection(page, 'appearance');
     await page
       .getByRole('radio', { name: theme === 'dark' ? 'Dark' : 'Light', exact: true })
       .check();
@@ -99,8 +101,20 @@ for (const theme of ['light', 'dark'] as const) {
       { width: 390, height: 844 },
     ]) {
       await page.setViewportSize(viewport);
-      for (const background of ['Default', 'Dawn', 'Forest', 'Lavender', 'Ocean']) {
+      for (const background of [
+        'Default',
+        'Dawn',
+        'Forest',
+        'Lavender',
+        'Ocean',
+        'Misty mountains',
+        'Lake',
+        'Dunes',
+        'Misty woodland',
+        'Wave',
+      ]) {
         await settings(page);
+        await settingsSection(page, 'appearance');
         await page.getByRole('radio', { name: background, exact: true }).check();
         await page.getByRole('button', { name: 'Close', exact: true }).click();
         await expectContinuousCanvas(page);
@@ -114,7 +128,6 @@ for (const theme of ['light', 'dark'] as const) {
     await expectContinuousCanvas(page);
   });
 }
-
 test('documents and notes retain readable local surfaces over the full background', async ({
   page,
 }) => {
@@ -153,6 +166,7 @@ test('documents and notes retain readable local surfaces over the full backgroun
     });
   for (const theme of ['Light', 'Dark']) {
     await settings(page);
+    await settingsSection(page, 'appearance');
     await page.getByRole('radio', { name: theme, exact: true }).check();
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     const style = await contrast('.rich-content');
@@ -162,5 +176,5 @@ test('documents and notes retain readable local surfaces over the full backgroun
   await page.locator('.sidebar-nav').getByRole('button', { name: 'Notes', exact: true }).click();
   await page.getByRole('button', { name: 'New note', exact: true }).click();
   await page.getByRole('textbox', { name: 'Note content' }).fill('A readable note.');
-  expect((await contrast('.plain-note textarea')).ratio).toBeGreaterThanOrEqual(4.5);
+  expect((await contrast('.plain-note .rich-content')).ratio).toBeGreaterThanOrEqual(4.5);
 });

@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { resumeProject, seedWorkspace } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -55,13 +56,14 @@ test('fresh workspace stays empty on reload and creates only user content', asyn
   await expect(page.locator('.home-project-list')).toBeEmpty();
   await expect(page.locator('.project-link')).toHaveCount(0);
 });
-
 test('light and dark appearance apply to the app and persist across reloads', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
   await expect(page.getByRole('main')).toBeVisible();
   await openSettings(page);
+  await settingsSection(page, 'appearance');
   await expect(page.getByRole('radio', { name: 'Системна' })).toBeChecked();
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Темна', exact: true }).check();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(
@@ -74,12 +76,13 @@ test('light and dark appearance apply to the app and persist across reloads', as
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await openSettings(page);
+  await settingsSection(page, 'appearance');
   await expect(page.getByRole('radio', { name: 'Темна', exact: true })).toBeChecked();
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Світла', exact: true }).check();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
-
 test('system appearance tracks OS changes while explicit appearance stays fixed', async ({
   page,
 }) => {
@@ -87,20 +90,23 @@ test('system appearance tracks OS changes while explicit appearance stays fixed'
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await openSettings(page);
+  await settingsSection(page, 'appearance');
   await expect(page.getByRole('radio', { name: 'Системна' })).toBeChecked();
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Темна', exact: true }).check();
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Системна' }).check();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.reload();
   await openSettings(page);
+  await settingsSection(page, 'appearance');
   await expect(page.getByRole('radio', { name: 'Системна' })).toBeChecked();
 });
-
 test('appearance changes preserve existing documents and the selected project', async ({
   page,
 }) => {
@@ -133,6 +139,7 @@ test('appearance changes preserve existing documents and the selected project', 
   await seedWorkspace(page, fixture);
   await resumeProject(page);
   await openSettings(page);
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Темна', exact: true }).check();
   await page.getByRole('button', { name: 'Закрити', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Збережено на пристрої' })).toBeVisible();

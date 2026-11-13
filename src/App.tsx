@@ -5,7 +5,7 @@ import UndoNotice from './UndoNotice';
 import type { UndoAction } from './UndoNotice';
 import { restoreAt, capture, restoreMany } from './restore';
 import { t, formatCount, getLocaleTag, useLanguage } from './i18n';
-import type { Message, Language } from './i18n';
+import type { Message } from './i18n';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Icon } from './Icon';
@@ -24,7 +24,6 @@ import type {
 } from './model';
 import { downloadBlob, isDesktop, loadWorkspace, openExternal, saveWorkspace } from './storage';
 import { useTheme } from './theme';
-import type { Theme } from './theme';
 import Notes from './Notes';
 import HomeProjects from './HomeProjects';
 import TableForm from './TableForm';
@@ -38,9 +37,10 @@ import TaskBoard from './TaskBoard';
 import type { Stage } from './TaskBoard';
 import FilePreview from './FilePreview';
 import { attachmentLimit, fileType } from './attachmentLimits';
-import { backgrounds, useBackground } from './background';
+import { useBackground } from './background';
 import { useUpdater } from './useUpdater';
-import UpdateSettings from './UpdateSettings';
+import Settings, { KeyboardShortcuts } from './Settings';
+import type { SettingsSection } from './Settings';
 import RichEditor, { RichPreview } from './RichEditor';
 import { documentFile, documentText, markdownHtml } from './documentHtml';
 import { readAttachment, storeAttachment } from './attachments';
@@ -57,7 +57,7 @@ type ModalState =
   | { type: 'table'; projectId: string }
   | { type: 'bulk-delete' }
   | { type: 'shortcuts' }
-  | { type: 'settings' }
+  | { type: 'settings'; section?: SettingsSection }
   | { type: 'file-preview'; material: Material }
   | {
       type: 'rename';
@@ -1118,7 +1118,7 @@ export default function App() {
     setView('notes');
     setSidebarOpen(false);
   }
-  function changeNote(id: string, patch: Partial<Pick<Note, 'title' | 'content'>>) {
+  function changeNote(id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'format'>>) {
     update((w) => ({
       ...w,
       notes: w.notes.map((note) =>
@@ -2540,125 +2540,25 @@ export default function App() {
         </Modal>
       )}
       {modal?.type === 'settings' && (
-        <Modal title={t('Налаштування')} onClose={closeModal}>
-          <fieldset className="theme-picker">
-            <legend>{t('Вигляд')}</legend>
-            <div className="theme-options">
-              {(
-                [
-                  { value: 'light', label: t('Світла'), icon: 'sun' },
-                  { value: 'dark', label: t('Темна'), icon: 'moon' },
-                  { value: 'system', label: t('Системна'), icon: 'monitor' },
-                ] as const
-              ).map((option) => (
-                <label
-                  key={option.value}
-                  className={`theme-option ${theme === option.value ? 'selected' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="theme"
-                    value={option.value}
-                    checked={theme === option.value}
-                    onChange={() => {
-                      if (!selectTheme(option.value as Theme))
-                        setNotification(
-                          t('Тему застосовано, але зберегти вибір на пристрої не вдалося.'),
-                        );
-                    }}
-                  />
-                  <span className={`theme-preview ${option.value}`} aria-hidden="true">
-                    <span className="preview-sidebar" />
-                    <span className="preview-content">
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                  </span>
-                  <span className="theme-option-label">
-                    <Icon name={option.icon} size={15} />
-                    <span>{option.label}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset className="background-picker">
-            <legend>{t('Фон')}</legend>
-            <div className="background-options">
-              {backgrounds.map((value, index) => (
-                <label
-                  key={value}
-                  className={`background-option ${background === value ? 'selected' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="background"
-                    value={value}
-                    checked={background === value}
-                    onChange={() => {
-                      if (!selectBackground(value)) setNotification(t('Не вдалося зберегти фон.'));
-                    }}
-                  />
-                  <span className={`background-swatch background-${value}`} aria-hidden="true" />
-                  <span>
-                    {t((['Стандартний', 'Світанок', 'Ліс', 'Лаванда', 'Океан'] as const)[index])}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <label className="language-setting">
-            <span className="language-setting-label">
-              <Icon name="globe" size={19} />
-              <span>{t('Мова')}</span>
-            </span>
-            <select
-              aria-label={t('Мова')}
-              value={language}
-              onChange={(event) => {
-                if (!selectLanguage(event.target.value as Language))
-                  setNotification(t('Мову застосовано, але зберегти вибір не вдалося.'));
-              }}
-            >
-              <option value="uk">Українська</option>
-              <option value="en">English</option>
-            </select>
-          </label>
-          <button className="settings-link" onClick={() => setModal({ type: 'shortcuts' })}>
-            <Icon name="keyboard" size={17} />
-            <span>{t('Клавіатурні скорочення')}</span>
-            <Icon name="chevron" size={15} />
-          </button>
-          <fieldset className="behavior-settings">
-            <legend>{t('Нотатки')}</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={preferences.showNotes}
-                onChange={(e) => savePreferences({ showNotes: e.target.checked })}
-              />
-              <span>{t('Показувати загальні нотатки')}</span>
-            </label>
-          </fieldset>
-          <fieldset className="behavior-settings">
-            <legend>{t('Редактор')}</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={preferences.autoFormat}
-                onChange={(e) => savePreferences({ autoFormat: e.target.checked })}
-              />
-              <span>{t('Автоформатування документів')}</span>
-            </label>
-            <small>{t('Перетворювати #, -, 1. і ** під час введення.')}</small>
-          </fieldset>
-          <UpdateSettings updater={updater} />
+        <Modal title={t('Налаштування')} onClose={closeModal} wide className="settings-modal">
+          <Settings
+            initialSection={modal.section}
+            theme={theme}
+            selectTheme={selectTheme}
+            background={background}
+            selectBackground={selectBackground}
+            language={language}
+            selectLanguage={selectLanguage}
+            preferences={preferences}
+            savePreferences={savePreferences}
+            updater={updater}
+            notify={setNotification}
+          />
         </Modal>
       )}
       {updater.showNotice && !modal && (
         <div className="update-notice" role="status">
-          <button onClick={() => setModal({ type: 'settings' })}>
+          <button onClick={() => setModal({ type: 'settings', section: 'updates' })}>
             {t('Доступна версія {version}.', { version: updater.version })}
           </button>
           <button
@@ -2679,36 +2579,7 @@ export default function App() {
       )}
       {modal?.type === 'shortcuts' && (
         <Modal title={t('Клавіатурні скорочення')} onClose={closeModal}>
-          <div className="shortcut-row">
-            <span>{t('Згорнути / розгорнути бічну панель')}</span>
-            <span>
-              <kbd>Ctrl / ⌘</kbd> <kbd>\</kbd>
-            </span>
-          </div>
-          <div className="shortcut-row">
-            <span>{t('Пошук у workspace')}</span>
-            <span>
-              <kbd>Ctrl / ⌘</kbd> <kbd>K</kbd>
-            </span>
-          </div>
-          <div className="shortcut-row">
-            <span>{t('Навігація результатами пошуку')}</span>
-            <span>
-              <kbd>↑</kbd> <kbd>↓</kbd>
-            </span>
-          </div>
-          <div className="shortcut-row">
-            <span>{t('Відкрити результат / додати завдання')}</span>
-            <kbd>Enter</kbd>
-          </div>
-          <div className="shortcut-row">
-            <span>{t('Закрити вікно')}</span>
-            <kbd>Esc</kbd>
-          </div>
-          <div className="shortcut-row">
-            <span>{t('Перейти до наступного елемента')}</span>
-            <kbd>Tab</kbd>
-          </div>
+          <KeyboardShortcuts />
         </Modal>
       )}
     </div>

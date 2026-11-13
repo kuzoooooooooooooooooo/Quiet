@@ -2,6 +2,16 @@ import { useSyncExternalStore } from 'react';
 
 // Source-language keys keep this small catalog readable without a runtime dependency.
 const english = {
+  Загальні: 'General',
+  Персоналізація: 'Personalization',
+  'Розділи налаштувань': 'Settings sections',
+  'Автоформатування тексту': 'Automatic text formatting',
+  'Туманні гори': 'Misty mountains',
+  Озеро: 'Lake',
+  Дюни: 'Dunes',
+  'Ліс у тумані': 'Misty woodland',
+  Хвиля: 'Wave',
+
   'Пошук проєктів': 'Search projects',
   'Сортування проєктів': 'Sort projects',
   'Нещодавно відкриті': 'Recently opened',

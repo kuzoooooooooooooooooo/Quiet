@@ -113,6 +113,7 @@ export function validateKit(value: unknown, ids: Set<string>): void {
       if (ids.size > 50_000) return fail();
       if (kind !== 'tables' && (!text(row.content) || row.content.length > 1_000_000))
         return fail();
+      if (kind === 'notes' && row.format !== undefined && row.format !== 'html') return fail();
       if (kind === 'snippets' && (!text(row.language) || row.language.length > 40)) return fail();
       if (kind === 'tables') {
         if (

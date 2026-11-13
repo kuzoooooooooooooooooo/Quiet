@@ -85,3 +85,10 @@ export async function resumeProject(page: Page) {
   if (context.tab === 'documents' && context.doc)
     await page.locator('.document-list-item').filter({ hasText: context.doc }).click();
 }
+
+export async function settingsSection(
+  page: Page,
+  section: 'general' | 'appearance' | 'editor' | 'keyboard' | 'updates',
+) {
+  await page.locator(`.settings-nav [data-section="${section}"]`).click();
+}

@@ -31,9 +31,13 @@ export default function RichEditor({
   content,
   onChange,
   autoFormat = false,
+  label = t('Вміст документа'),
+  compact = false,
 }: {
   content: string;
   autoFormat?: boolean;
+  label?: string;
+  compact?: boolean;
   onChange: (content: string) => void;
 }) {
   const editor = useRef<HTMLDivElement>(null);
@@ -119,7 +123,7 @@ export default function RichEditor({
     ['justifyRight', 'Праворуч', '≡'],
   ] as const;
   return (
-    <div className="rich-editor">
+    <div className={`rich-editor ${compact ? 'compact-editor' : ''}`}>
       <div className="format-toolbar" role="toolbar" aria-label={t('Форматування тексту')}>
         <select
           aria-label={t('Шрифт')}
@@ -267,7 +271,7 @@ export default function RichEditor({
       <div
         ref={editor}
         role="textbox"
-        aria-label={t('Вміст документа')}
+        aria-label={label}
         aria-multiline="true"
         contentEditable
         suppressContentEditableWarning

@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { resumeProject } from './helpers';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -55,7 +56,6 @@ test('collapsing preserves the document, caret and saved context after reload', 
   await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
   await expect(page.locator('.app-shell')).not.toHaveClass(/sidebar-collapsed/);
 });
-
 test('compact rail keeps project creation, project navigation, search and settings accessible', async ({
   page,
 }) => {
@@ -72,6 +72,7 @@ test('compact rail keeps project creation, project navigation, search and settin
   await page.getByRole('textbox', { name: 'Search workspace', exact: true }).press('Enter');
   await expect(page.getByRole('heading', { name: 'Code', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(page, 'general');
   await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Search workspace', exact: true }).click();
@@ -97,7 +98,6 @@ test('mobile drawer stays readable after a desktop collapse and preserves the de
   await expect(page.locator('.sidebar')).toHaveCSS('width', '56px');
   await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
 });
-
 test('shortcut respects open dialogs and sidebar controls follow the chosen language', async ({
   page,
 }) => {
@@ -109,6 +109,7 @@ test('shortcut respects open dialogs and sidebar controls follow the chosen lang
   await page.keyboard.press('Control+Backslash');
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(page, 'general');
   await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('uk');
   await page.getByRole('button', { name: 'Закрити', exact: true }).click();
   await page.getByRole('button', { name: 'Розгорнути панель', exact: true }).click();

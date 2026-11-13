@@ -3454,3 +3454,156 @@ kbd {
     padding: 15px 12px;
   }
 }
+
+.settings-modal.wide {
+  width: 790px;
+  padding: 26px;
+}
+.settings-layout {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 28px;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-self: start;
+}
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 11px 10px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settings-nav button svg {
+  flex-shrink: 0;
+}
+.settings-nav button:hover {
+  background: var(--surface-subtle);
+}
+.settings-nav button[aria-current] {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+.settings-panel {
+  min-width: 0;
+  min-height: 350px;
+}
+.settings-panel .theme-picker {
+  margin-top: 0;
+}
+.settings-panel .language-setting {
+  margin-top: 0;
+}
+.settings-panel .update-settings {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.settings-panel .behavior-settings:first-child {
+  margin-top: 0;
+}
+.settings-panel .shortcut-row {
+  gap: 16px;
+  line-height: 1.6;
+}
+.plain-note .rich-editor {
+  min-width: 0;
+  flex: 1;
+}
+.plain-note .rich-content {
+  min-height: 330px;
+  white-space: pre-wrap;
+}
+.compact-editor .format-toolbar {
+  gap: 3px;
+  padding: 7px;
+}
+.project-filter:focus-within {
+  outline-offset: 2px;
+}
+
+:root[data-background='mountains'] {
+  --wallpaper: url('/backgrounds/mountains.webp');
+}
+.background-mountains {
+  background: url('/backgrounds/mountains.webp') center / cover;
+}
+
+:root[data-background='lake'] {
+  --wallpaper: url('/backgrounds/lake.webp');
+}
+.background-lake {
+  background: url('/backgrounds/lake.webp') center / cover;
+}
+
+:root[data-background='dunes'] {
+  --wallpaper: url('/backgrounds/dunes.webp');
+}
+.background-dunes {
+  background: url('/backgrounds/dunes.webp') center / cover;
+}
+
+:root[data-background='woodland'] {
+  --wallpaper: url('/backgrounds/woodland.webp');
+}
+.background-woodland {
+  background: url('/backgrounds/woodland.webp') center / cover;
+}
+
+:root[data-background='wave'] {
+  --wallpaper: url('/backgrounds/wave.webp');
+}
+.background-wave {
+  background: url('/backgrounds/wave.webp') center / cover;
+}
+
+:root[data-background='mountains'],
+:root[data-background='lake'],
+:root[data-background='dunes'],
+:root[data-background='woodland'],
+:root[data-background='wave'] {
+  background-image: linear-gradient(#f8f6f2b8, #f8f6f2b8), var(--wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+:root[data-theme='dark'][data-background='mountains'],
+:root[data-theme='dark'][data-background='lake'],
+:root[data-theme='dark'][data-background='dunes'],
+:root[data-theme='dark'][data-background='woodland'],
+:root[data-theme='dark'][data-background='wave'] {
+  background-image: linear-gradient(#14131bcc, #14131bcc), var(--wallpaper);
+}
+@media (max-width: 600px) {
+  .settings-modal.wide {
+    padding: 20px;
+  }
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    gap: 4px;
+  }
+  .settings-nav button {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 9px;
+  }
+  .settings-panel {
+    min-height: 300px;
+  }
+  .settings-panel .background-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
