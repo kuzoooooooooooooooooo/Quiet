@@ -185,7 +185,7 @@ test('multiple file upload, drag-and-drop, ZIP originals, batch delete and undo'
   await page.goto('/');
   await project(page, 'Files');
   await tab(page, 'Materials');
-  await page.locator('input[type=file]').setInputFiles([
+  await page.locator('input[type=file]:not([data-document-upload])').setInputFiles([
     { name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('Original one') },
     { name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('Original two') },
   ]);

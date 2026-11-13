@@ -23,7 +23,7 @@ function archive(parts: Record<string, string>) {
 }
 async function attach(page: import('@playwright/test').Page, name: string, buffer: Buffer) {
   await page
-    .locator('input[type=file]')
+    .locator('input[type=file]:not([data-document-upload])')
     .setInputFiles({ name, mimeType: 'application/octet-stream', buffer });
   await expect(page.locator('.material-row').filter({ hasText: name })).toBeVisible();
   await expect(page.locator('.save-status')).toContainText('Saved on this device');
@@ -175,7 +175,7 @@ test('files above 5 MB compress in a worker and download completely; limit rejec
   await page.getByRole('button', { name: 'Download file', exact: true }).click();
   expect((await readFile((await (await pending).path())!)).equals(bytes)).toBe(true);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.locator('input[type=file]').setInputFiles({
+  await page.locator('input[type=file]:not([data-document-upload])').setInputFiles({
     name: 'too-big.bin',
     mimeType: 'application/octet-stream',
     buffer: Buffer.alloc(26 * 1024 * 1024),

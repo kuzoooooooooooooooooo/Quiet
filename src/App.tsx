@@ -36,6 +36,7 @@ import type { ProjectKit, ModuleId } from './projectKit';
 import TaskBoard from './TaskBoard';
 import type { Stage } from './TaskBoard';
 import FilePreview from './FilePreview';
+import UploadedDocument from './UploadedDocument';
 import { attachmentLimit, fileType } from './attachmentLimits';
 import { useBackground } from './background';
 import { useUpdater } from './useUpdater';
@@ -481,6 +482,7 @@ export default function App() {
   const [preview, setPreview] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const documentFileInput = useRef<HTMLInputElement>(null);
   const taskInput = useRef<HTMLInputElement>(null);
   const documentTitle = useRef<HTMLInputElement>(null);
   const latestSave = useRef<Promise<void>>(Promise.resolve());
@@ -922,6 +924,55 @@ export default function App() {
       documentTitle.current?.select();
     }, 0);
   }
+  async function uploadDocuments(files: FileList | File[]) {
+    if (!project) return;
+    const projectId = project.id;
+    for (const file of Array.from(files)) {
+      try {
+        const type = fileType({ title: file.name });
+        if (!['pdf', 'docx'].includes(type))
+          throw new Error(t('У Документи можна додавати лише DOCX та PDF.'));
+        if (file.name.length > 255) throw new Error(t('Занадто довга назва файлу.'));
+        if (file.size > attachmentLimit) throw new Error(t('Максимальний розмір файлу — 25 МБ.'));
+        const stored = await storeAttachment(file);
+        const doc: Document = {
+          id: uid(),
+          projectId,
+          title: file.name,
+          content: '',
+          updatedAt: now(),
+          file: { ...stored, fileType: type as 'pdf' | 'docx', name: file.name },
+        };
+        update((w) =>
+          w.projects.some((p) => p.id === projectId)
+            ? {
+                ...w,
+                documents: [...w.documents, doc],
+                context:
+                  w.context.projectId === projectId
+                    ? { projectId, tab: 'documents', documentId: doc.id }
+                    : w.context,
+              }
+            : w,
+        );
+      } catch (error) {
+        setNotification(message(error));
+      }
+    }
+    if (documentFileInput.current) documentFileInput.current.value = '';
+  }
+  function downloadDocument(doc: Document) {
+    if (doc.file) {
+      void readAttachment(doc.file)
+        .then((blob) => downloadBlob(blob, doc.file!.name))
+        .catch((error) =>
+          setNotification(t('Не вдалося завантажити: {error}', { error: message(error) })),
+        );
+    } else {
+      const file = documentFile(doc);
+      download(file.blob, file.name);
+    }
+  }
   function patchDocument(patch: Partial<Pick<Document, 'title' | 'content' | 'format'>>) {
     if (!activeDocument) return;
     update((w) => ({
@@ -1234,12 +1285,15 @@ export default function App() {
     if (kind === 'document')
       actions.push({
         label: t(
-          (item as Document).format === 'html' ? 'Завантажити HTML' : 'Завантажити Markdown',
+          (item as Document).file
+            ? 'Завантажити файл'
+            : (item as Document).format === 'html'
+              ? 'Завантажити HTML'
+              : 'Завантажити Markdown',
         ),
         icon: 'download',
         action: () => {
-          const file = documentFile(item as Document);
-          download(file.blob, file.name);
+          downloadDocument(item as Document);
         },
       });
     actions.push({
@@ -1381,7 +1435,12 @@ export default function App() {
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes('Files')) {
           event.preventDefault();
-          if (project && enabled(project, 'materials') && !modal) setDraggingFiles(true);
+          if (
+            project &&
+            enabled(project, tab === 'documents' ? 'documents' : 'materials') &&
+            !modal
+          )
+            setDraggingFiles(true);
         }
       }}
       onDragLeave={(event) => {
@@ -1391,9 +1450,16 @@ export default function App() {
         if (event.dataTransfer.types.includes('Files')) {
           event.preventDefault();
           setDraggingFiles(false);
-          if (project && enabled(project, 'materials') && !modal) {
-            selectTab('materials');
-            void attachFiles(event.dataTransfer.files);
+          if (
+            project &&
+            enabled(project, tab === 'documents' ? 'documents' : 'materials') &&
+            !modal
+          ) {
+            if (tab === 'documents') void uploadDocuments(event.dataTransfer.files);
+            else {
+              selectTab('materials');
+              void attachFiles(event.dataTransfer.files);
+            }
           }
         }
       }}
@@ -1629,6 +1695,14 @@ export default function App() {
                     { label: t('Нове завдання'), icon: 'circle' as const, action: focusTask },
                     { label: t('Новий документ'), icon: 'file' as const, action: createDocument },
                     {
+                      label: t('Завантажити документ'),
+                      icon: 'file' as const,
+                      action: () => {
+                        selectTab('documents');
+                        documentFileInput.current?.click();
+                      },
+                    },
+                    {
                       label: t('Додати посилання'),
                       icon: 'link' as const,
                       action: () => {
@@ -1815,12 +1889,16 @@ export default function App() {
                                   <span>
                                     <strong>{doc.title}</strong>
                                     <small>
-                                      {documentText(doc)
-                                        .split('\n')
-                                        .find((line) => line.trim() && !line.startsWith('#'))
-                                        ?.trim()
-                                        .replace(/[*_`]/g, '')
-                                        .slice(0, 85) || shortDate(doc.updatedAt)}
+                                      {doc.file
+                                        ? doc.file.fileType.toUpperCase() +
+                                          ' · ' +
+                                          formatSize(doc.file.size)
+                                        : documentText(doc)
+                                            .split('\n')
+                                            .find((line) => line.trim() && !line.startsWith('#'))
+                                            ?.trim()
+                                            .replace(/[*_`]/g, '')
+                                            .slice(0, 85) || shortDate(doc.updatedAt)}
                                     </small>
                                   </span>
                                   <Icon name="chevron" size={15} />
@@ -2074,6 +2152,14 @@ export default function App() {
                     >
                       <Icon name="plus" size={17} />
                     </button>
+                    <button
+                      className="icon-button"
+                      aria-label={t('Завантажити документ')}
+                      title={t('Завантажити документ')}
+                      onClick={() => documentFileInput.current?.click()}
+                    >
+                      <Icon name="upload" size={17} />
+                    </button>
                   </div>
                   {documents.map((doc) => (
                     <button
@@ -2085,11 +2171,35 @@ export default function App() {
                       onClick={() => openDocument(doc.id)}
                     >
                       <Icon name="file" size={17} />
-                      <span>{doc.title}</span>
+                      <span className="document-list-label">
+                        {doc.title}
+                        {doc.file && (
+                          <small>
+                            {doc.file.fileType.toUpperCase()} · {formatSize(doc.file.size)}
+                          </small>
+                        )}
+                      </span>
                     </button>
                   ))}
                 </aside>
-                {activeDocument ? (
+                {activeDocument?.file ? (
+                  <UploadedDocument
+                    key={activeDocument.id}
+                    doc={activeDocument}
+                    size={formatSize(activeDocument.file.size)}
+                    onTitle={(title) => patchDocument({ title })}
+                    onRename={() =>
+                      setModal({
+                        type: 'rename',
+                        kind: 'document',
+                        id: activeDocument.id,
+                        value: activeDocument.title,
+                      })
+                    }
+                    onDownload={() => downloadDocument(activeDocument)}
+                    onDelete={() => deleteDocument(activeDocument)}
+                  />
+                ) : activeDocument ? (
                   <article className="editor">
                     <div className="editor-toolbar">
                       <span>
@@ -2384,6 +2494,17 @@ export default function App() {
         )}
       </div>
 
+      <input
+        type="file"
+        data-document-upload
+        ref={documentFileInput}
+        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void uploadDocuments(e.target.files);
+        }}
+      />
       <input
         type="file"
         ref={fileInput}

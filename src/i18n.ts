@@ -2,6 +2,11 @@ import { useSyncExternalStore } from 'react';
 
 // Source-language keys keep this small catalog readable without a runtime dependency.
 const english = {
+  'Завантажити документ': 'Upload document',
+  'У Документи можна додавати лише DOCX та PDF.':
+    'Only DOCX and PDF files can be added to Documents.',
+  'Занадто довга назва файлу.': 'The file name is too long.',
+
   Загальні: 'General',
   Персоналізація: 'Personalization',
   'Розділи налаштувань': 'Settings sections',

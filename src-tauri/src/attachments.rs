@@ -83,7 +83,7 @@ impl Database {
     }
     pub fn prune_attachments(&self) -> Result<(), String> {
         // Grace period protects a freshly stored file before its metadata is committed.
-        self.connection.execute("DELETE FROM attachments WHERE touched < unixepoch()-86400 AND hash NOT IN (SELECT substr(json_extract(data,'$.url'),12) FROM materials WHERE json_extract(data,'$.kind')='file' AND json_extract(data,'$.url') LIKE 'attachment:%')", []).map_err(|e| e.to_string())?;
+        self.connection.execute("DELETE FROM attachments WHERE touched < unixepoch()-86400 AND hash NOT IN (SELECT substr(json_extract(data,'$.url'),12) FROM materials WHERE json_extract(data,'$.kind')='file' AND json_extract(data,'$.url') LIKE 'attachment:%' UNION SELECT substr(json_extract(data,'$.file.url'),12) FROM documents WHERE json_extract(data,'$.file.url') LIKE 'attachment:%')", []).map_err(|e| e.to_string())?;
         let free_pages: u64 = self
             .connection
             .query_row("PRAGMA freelist_count", [], |row| row.get(0))
@@ -150,6 +150,64 @@ mod reference_tests {
     use crate::model::Workspace;
     use serde_json::json;
     #[test]
+    fn uploaded_documents_share_binaries_and_survive_schema_five_upgrade() {
+        let path =
+            std::env::temp_dir().join(format!("quiet-document-files-{}.db", std::process::id()));
+        let bytes = b"%PDF-1.4 uploaded document";
+        let mut expected: Workspace;
+        let hash: String;
+        {
+            let mut db = Database::open(&path).unwrap();
+            let stored = db.store_attachment(bytes).unwrap();
+            hash = stored.hash;
+            expected = serde_json::from_value(json!({
+                "version":1,"notes":[],"projects":[{"id":"p","name":"Project","description":"","tone":"green","createdAt":"2026-11-13T10:00:00Z"}],
+                "documents":[{"id":"d","projectId":"p","title":"Uploaded","content":"","updatedAt":"2026-11-13T10:00:00Z","file":{"url":format!("attachment:{}",hash),"name":"File.PDF","fileType":"pdf","size":bytes.len(),"storedSize":stored.stored_size}}],
+                "tasks":[],"materials":[{"id":"m","projectId":"p","title":"File.PDF","url":format!("attachment:{}",hash),"kind":"file","size":bytes.len(),"createdAt":"2026-11-13T10:00:00Z"}],
+                "context":{"projectId":"p","tab":"documents","documentId":"d"}
+            })).unwrap();
+            db.save(&expected).unwrap();
+            db.connection
+                .execute_batch("UPDATE attachments SET touched=0; PRAGMA user_version=5;")
+                .unwrap();
+        }
+        {
+            let mut db = Database::open(&path).unwrap();
+            assert_eq!(db.load().unwrap(), Some(expected.clone()));
+            expected.materials.clear();
+            db.save(&expected).unwrap();
+            db.prune_attachments().unwrap();
+            assert_eq!(db.load_attachment(&hash).unwrap(), bytes);
+            let mut invalid = expected.clone();
+            invalid.documents[0].file.as_mut().unwrap().size += 1;
+            assert!(db.save(&invalid).is_err());
+            invalid = expected.clone();
+            invalid.documents[0].file.as_mut().unwrap().url =
+                format!("attachment:{}", "0".repeat(64));
+            assert!(db.save(&invalid).is_err());
+            invalid = expected.clone();
+            invalid.documents[0].file.as_mut().unwrap().file_type = "pptx".into();
+            assert!(db.save(&invalid).is_err());
+            assert_eq!(db.load().unwrap(), Some(expected.clone()));
+            let doc = expected.documents.remove(0);
+            expected.context.document_id = None;
+            db.save(&expected).unwrap();
+            assert_eq!(db.load_attachment(&hash).unwrap(), bytes);
+            expected.documents.push(doc);
+            expected.context.document_id = Some("d".into());
+            db.save(&expected).unwrap();
+            db.prune_attachments().unwrap();
+            assert_eq!(db.load_attachment(&hash).unwrap(), bytes);
+            expected.documents.clear();
+            expected.context.document_id = None;
+            db.save(&expected).unwrap();
+            db.prune_attachments().unwrap();
+            assert!(db.load_attachment(&hash).is_err());
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn references_protect_shared_files_and_missing_binaries_cannot_be_saved() {
         let mut db = Database::open(":memory:").unwrap();
         let bytes = b"Shared attachment";
@@ -192,7 +250,7 @@ mod reference_tests {
                 db.connection
                     .query_row("PRAGMA user_version", [], |r| r.get::<_, u64>(0))
                     .unwrap(),
-                5
+                6
             );
             let stored = db.store_attachment(b"After upgrade").unwrap();
             assert_eq!(db.load_attachment(&stored.hash).unwrap(), b"After upgrade");

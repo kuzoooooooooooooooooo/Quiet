@@ -2,8 +2,8 @@ import { t } from './i18n';
 let database: Promise<IDBDatabase> | undefined;
 export function openDatabase(): Promise<IDBDatabase> {
   return (database ??= new Promise((resolve, reject) => {
-    // Schema 4 protects formatted notes from older versions that discard their format.
-    const request = indexedDB.open('quiet-workspace', 4);
+    // Schema 5 protects uploaded documents from versions that discard file references.
+    const request = indexedDB.open('quiet-workspace', 5);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains('workspace')) db.createObjectStore('workspace');

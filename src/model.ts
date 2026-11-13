@@ -23,7 +23,15 @@ export interface Project {
   tone: Tone;
   createdAt: string;
 }
+export interface DocumentFile {
+  url: string;
+  size: number;
+  storedSize?: number;
+  fileType: 'docx' | 'pdf';
+  name: string;
+}
 export interface Document {
+  file?: DocumentFile;
   id: string;
   projectId: string;
   title: string;
@@ -158,6 +166,31 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
       (d.format !== undefined && !['markdown', 'html'].includes(d.format as string))
     )
       throw new Error(translate('Некоректний документ.'));
+  for (const d of documents as Record<string, unknown>[]) {
+    if (d.file === undefined) continue;
+    const f = d.file;
+    if (
+      !isObject(f) ||
+      !allowStoredFiles ||
+      !isText(f.url) ||
+      !/^attachment:[a-f0-9]{64}$/.test(f.url) ||
+      !isText(f.name) ||
+      !f.name.trim() ||
+      f.name.length > 255 ||
+      !['pdf', 'docx'].includes(f.fileType as string) ||
+      f.name.split('.').at(-1)?.toLowerCase() !== f.fileType ||
+      !Number.isSafeInteger(f.size) ||
+      (f.size as number) < 0 ||
+      (f.size as number) > attachmentLimit ||
+      (f.storedSize !== undefined &&
+        (!Number.isSafeInteger(f.storedSize) ||
+          (f.storedSize as number) < 0 ||
+          (f.storedSize as number) > (f.size as number))) ||
+      d.content !== '' ||
+      d.format !== undefined
+    )
+      throw new Error(translate('Некоректний вкладений файл.'));
+  }
   for (const t of tasks as Record<string, unknown>[])
     if (
       typeof t.done !== 'boolean' ||
@@ -263,7 +296,7 @@ export function searchWorkspace(workspace: Workspace, query: string): SearchResu
       projectId: d.projectId,
       kind: 'document' as const,
       title: d.title,
-      detail: documentText(d),
+      detail: d.file ? d.file.name + ' ' + d.file.fileType : documentText(d),
     })),
     ...workspace.tasks.map((t) => ({
       id: t.id,

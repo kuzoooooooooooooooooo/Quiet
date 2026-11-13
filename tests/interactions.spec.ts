@@ -154,7 +154,7 @@ test('document and binary attachment undo restore content without dropping new d
   await page.getByRole('button', { name: /^Materials/ }).click();
   const bytes = Buffer.from([0, 255, 1, 128, 42]);
   await page
-    .locator('input[type=file]')
+    .locator('input[type=file]:not([data-document-upload])')
     .first()
     .setInputFiles({ name: 'sample.bin', mimeType: 'application/octet-stream', buffer: bytes });
   await page.getByRole('button', { name: 'Delete material sample.bin', exact: true }).click();
