@@ -28,6 +28,7 @@ import Notes from './Notes';
 import HomeProjects from './HomeProjects';
 import TableForm from './TableForm';
 import CompletedTasks from './CompletedTasks';
+import ProjectOverview from './ProjectOverview';
 import { usePreferences, updatePreferences, markProjectOpened } from './preferences';
 import type { Preferences } from './preferences';
 import ProjectModules, { ModulePicker, SortControl, reorder } from './ProjectModules';
@@ -1795,162 +1796,53 @@ export default function App() {
             </nav>
 
             {tab === 'overview' && (
-              <div className="overview-content">
-                <div className="overview-grid">
-                  {enabled(project, 'tasks') && (
-                    <>
-                      {' '}
-                      <section className="panel">
-                        <div className="section-heading">
-                          <h2>
-                            <Icon name="circle" size={17} />
-
-                            {t('Завдання')}
-                          </h2>
-                          <span className="muted small">
-                            {completed} / {tasks.length}
-                          </span>
-                        </div>
-                        <div className="task-preview">
-                          {tasks.length ? (
-                            activeTasks
-                              .slice(0, 5)
-                              .map((task) => (
-                                <TaskRow
-                                  key={task.id}
-                                  task={task}
-                                  onToggle={() => toggleTask(task.id)}
-                                  onDelete={() => deleteTask(task.id)}
-                                  onRename={(value) => renameTask(task.id, value)}
-                                  highlight={highlight === task.id}
-                                />
-                              ))
-                          ) : (
-                            <p className="inline-empty">{t('Немає завдань')}</p>
-                          )}
-                        </div>
-                        <CompletedTasks
-                          tasks={tasks.filter((t) => t.done)}
-                          expanded={completedOpen}
-                          onExpanded={setCompletedOpen}
-                          render={(task) => (
-                            <TaskRow
-                              key={task.id}
-                              task={task}
-                              onToggle={() => toggleTask(task.id)}
-                              onDelete={() => deleteTask(task.id)}
-                              onRename={(value) => renameTask(task.id, value)}
-                              highlight={highlight === task.id}
-                            />
-                          )}
-                        />
-                        <button className="panel-add" onClick={focusTask}>
-                          <Icon name="plus" size={16} />
-
-                          {t('Додати завдання')}
-                        </button>
-                      </section>
-                    </>
-                  )}
-                  {enabled(project, 'documents') && (
-                    <>
-                      {' '}
-                      <section className="panel">
-                        <div className="section-heading">
-                          <h2>
-                            <Icon name="file" size={17} />
-
-                            {t('Документи')}
-                          </h2>
-                          <button
-                            className="icon-button"
-                            aria-label={t('Створити документ')}
-                            onClick={createDocument}
-                          >
-                            <Icon name="plus" size={17} />
-                          </button>
-                        </div>
-                        <div className="document-preview">
-                          {documents.length ? (
-                            [...documents]
-                              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-                              .slice(0, 4)
-                              .map((doc) => (
-                                <button
-                                  key={doc.id}
-                                  data-context-kind="document"
-                                  data-context-id={doc.id}
-                                  className="document-card"
-                                  onClick={() => openDocument(doc.id)}
-                                >
-                                  <span className="document-icon">
-                                    <Icon name="file" size={19} />
-                                  </span>
-                                  <span>
-                                    <strong>{doc.title}</strong>
-                                    <small>
-                                      {doc.file
-                                        ? doc.file.fileType.toUpperCase() +
-                                          ' · ' +
-                                          formatSize(doc.file.size)
-                                        : documentText(doc)
-                                            .split('\n')
-                                            .find((line) => line.trim() && !line.startsWith('#'))
-                                            ?.trim()
-                                            .replace(/[*_`]/g, '')
-                                            .slice(0, 85) || shortDate(doc.updatedAt)}
-                                    </small>
-                                  </span>
-                                  <Icon name="chevron" size={15} />
-                                </button>
-                              ))
-                          ) : (
-                            <p className="inline-empty">{t('Немає документів')}</p>
-                          )}
-                        </div>
-                        <button className="panel-add" onClick={createDocument}>
-                          <Icon name="plus" size={16} />
-
-                          {t('Новий документ')}
-                        </button>
-                      </section>
-                    </>
-                  )}
-                </div>
-                {enabled(project, 'materials') && (
-                  <section className="materials-summary">
-                    <div className="summary-icon">
-                      <Icon name="link" size={21} />
-                    </div>
-                    <div>
-                      <h3>{t('Матеріали')}</h3>
-                      <p>
-                        {materials.length
-                          ? formatCount('material', materials.length)
-                          : t('Немає матеріалів')}
-                      </p>
-                    </div>
-                    <button className="button secondary" onClick={() => selectTab('materials')}>
-                      {materials.length ? t('Відкрити матеріали') : t('Додати матеріали')}
-                      <Icon name="arrow" size={15} />
-                    </button>
-                  </section>
+              <ProjectOverview
+                project={project}
+                tasks={tasks}
+                documents={documents}
+                materials={materials}
+                completedOpen={completedOpen}
+                onCompleted={setCompletedOpen}
+                renderTask={(task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    onToggle={() => toggleTask(task.id)}
+                    onDelete={() => deleteTask(task.id)}
+                    onRename={(value) => renameTask(task.id, value)}
+                    highlight={highlight === task.id}
+                  />
                 )}
-                <div className="module-launchers">
-                  {tabs
-                    .filter(
-                      (x) =>
-                        ['notes', 'snippets', 'tables'].includes(x.id) &&
-                        enabled(project, x.id as ModuleId),
-                    )
-                    .map((x) => (
-                      <button className="home-project" key={x.id} onClick={() => selectTab(x.id)}>
-                        <Icon name={tabIcons[x.id]} />
-                        {t(x.label)}
-                      </button>
-                    ))}
-                </div>
-              </div>
+                onAddTask={focusTask}
+                onCreateDocument={createDocument}
+                onUploadDocument={() => {
+                  selectTab('documents');
+                  documentFileInput.current?.click();
+                }}
+                onOpenDocument={openDocument}
+                onOpenMaterial={openMaterial}
+                onDownloadMaterial={downloadMaterial}
+                onRenameMaterial={(material) =>
+                  setModal({
+                    type: 'rename',
+                    kind: 'material',
+                    id: material.id,
+                    value: material.title,
+                  })
+                }
+                onDeleteMaterial={deleteMaterial}
+                onAddFile={() => {
+                  selectTab('materials');
+                  fileInput.current?.click();
+                }}
+                onAddLink={() => {
+                  selectTab('materials');
+                  setModal({ type: 'material' });
+                }}
+                onTab={selectTab}
+                formatSize={formatSize}
+                shortDate={shortDate}
+              />
             )}
 
             {tab !== 'overview' && !enabled(project, tab) && (

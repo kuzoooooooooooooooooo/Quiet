@@ -3,7 +3,7 @@ import { t } from './i18n';
 import type { Language } from './i18n';
 import { Icon } from './Icon';
 import type { Theme } from './theme';
-import { backgrounds, backgroundLabels } from './background';
+import { backgroundGroups, backgroundLabels } from './background';
 import type { Background } from './background';
 import type { Preferences } from './preferences';
 import type { useUpdater } from './useUpdater';
@@ -178,31 +178,36 @@ export default function Settings({
             </fieldset>
             <fieldset className="background-picker">
               <legend>{t('Фон')}</legend>
-              <div className="background-options">
-                {backgrounds.map((value) => (
-                  <label
-                    key={value}
-                    className={`background-option ${background === value ? 'selected' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="background"
-                      value={value}
-                      checked={background === value}
-                      onChange={() => {
-                        if (!selectBackground(value))
-                          setNotification(t('Не вдалося зберегти фон.'));
-                      }}
-                    />
-                    <span
-                      className={`background-swatch background-${value}`}
-                      data-wallpaper={value}
-                      aria-hidden="true"
-                    />
-                    <span>{t(backgroundLabels[value])}</span>
-                  </label>
-                ))}
-              </div>
+              {backgroundGroups.map((group) => (
+                <section className="background-group" key={group.label} aria-label={t(group.label)}>
+                  <h3>{t(group.label)}</h3>{' '}
+                  <div className="background-options">
+                    {group.values.map((value) => (
+                      <label
+                        key={value}
+                        className={`background-option ${background === value ? 'selected' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="background"
+                          value={value}
+                          checked={background === value}
+                          onChange={() => {
+                            if (!selectBackground(value))
+                              setNotification(t('Не вдалося зберегти фон.'));
+                          }}
+                        />
+                        <span
+                          className={`background-swatch background-${value}`}
+                          data-wallpaper={value}
+                          aria-hidden="true"
+                        />
+                        <span>{t(backgroundLabels[value])}</span>
+                      </label>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </fieldset>
           </>
         )}

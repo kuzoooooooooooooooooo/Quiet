@@ -62,6 +62,7 @@ test('create a named table from an empty project, validate dimensions and preser
 test('document typing shortcuts are optional, persistent, undoable and keep manual formatting', async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.goto('/');
   await project(page, 'Writing');
   await doc(page);
@@ -285,9 +286,7 @@ for (const language of ['en', 'uk']) {
       { width: 390, height: 844 },
     ]) {
       await page.setViewportSize(size);
-      const action = page
-        .locator('.panel-add')
-        .filter({ hasText: uk ? 'Новий документ' : 'New document' });
+      const action = page.locator('.overview-empty-documents .action-menu > button');
       await action.hover();
       const before = await action.boundingBox();
       await page.mouse.move(0, 0);

@@ -92,3 +92,16 @@ export async function settingsSection(
 ) {
   await page.locator(`.settings-nav [data-section="${section}"]`).click();
 }
+
+export async function openNewDocument(page: Page) {
+  const en = await page.evaluate(() => localStorage.getItem('quiet.language') === 'en');
+  const name = en ? 'New document' : 'Новий документ';
+  const direct = page.getByRole('button', { name, exact: true });
+  if (await direct.count()) await direct.click();
+  else {
+    await page
+      .getByRole('button', { name: en ? 'Add document' : 'Додати документ', exact: true })
+      .click();
+    await page.getByRole('menuitem', { name, exact: true }).click();
+  }
+}

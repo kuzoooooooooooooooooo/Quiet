@@ -2,6 +2,25 @@ import { useSyncExternalStore } from 'react';
 
 // Source-language keys keep this small catalog readable without a runtime dependency.
 const english = {
+  Градієнти: 'Gradients',
+  Природа: 'Nature',
+  'Світлі абстрактні': 'Light abstract',
+  'Темні абстрактні': 'Dark abstract',
+  Графіт: 'Graphite',
+  Дим: 'Smoke',
+  'Темна шавлія': 'Dark sage',
+
+  'Додати документ': 'Add document',
+  'Дії матеріалу {title}': 'Material actions: {title}',
+  'Усе виконано': 'All done',
+  'Поки порожньо': 'Empty for now',
+  'Усі завдання': 'All tasks',
+  'Усі матеріали': 'All materials',
+  'Усі документи': 'All documents',
+  Шовк: 'Silk',
+  'Срібні дуги': 'Silver arcs',
+  Шавлія: 'Sage',
+
   'Завантажити документ': 'Upload document',
   'У Документи можна додавати лише DOCX та PDF.':
     'Only DOCX and PDF files can be added to Documents.',

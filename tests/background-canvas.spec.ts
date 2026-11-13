@@ -1,3 +1,4 @@
+import { openNewDocument } from './helpers';
 import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -84,7 +85,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`${theme}: all backgrounds cover Home continuously on desktop, compact rail and mobile`, async ({
     page,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     await page.addInitScript((theme) => {
       localStorage.setItem('quiet.language', 'en');
       localStorage.setItem('quiet.theme', theme);
@@ -112,6 +113,12 @@ for (const theme of ['light', 'dark'] as const) {
         'Dunes',
         'Misty woodland',
         'Wave',
+        'Silk',
+        'Silver arcs',
+        'Sage',
+        'Graphite',
+        'Smoke',
+        'Dark sage',
       ]) {
         await settings(page);
         await settingsSection(page, 'appearance');
@@ -140,7 +147,7 @@ test('documents and notes retain readable local surfaces over the full backgroun
     .getByRole('button', { name: 'Create project', exact: true })
     .click();
   await page.getByRole('button', { name: /^Documents/ }).click();
-  await page.getByRole('button', { name: 'New document', exact: true }).click();
+  await openNewDocument(page);
   await page.getByRole('textbox', { name: 'Document content' }).fill('A readable document.');
   const contrast = async (selector: string) =>
     page.locator(selector).evaluate((el) => {

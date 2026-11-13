@@ -10,6 +10,12 @@ export const backgrounds = [
   'dunes',
   'woodland',
   'wave',
+  'silk',
+  'slate',
+  'sage',
+  'graphite',
+  'smoke',
+  'dark-sage',
 ] as const;
 export type Background = (typeof backgrounds)[number];
 export const backgroundLabels = {
@@ -23,7 +29,19 @@ export const backgroundLabels = {
   dunes: 'Дюни',
   woodland: 'Ліс у тумані',
   wave: 'Хвиля',
+  silk: 'Шовк',
+  slate: 'Срібні дуги',
+  sage: 'Шавлія',
+  graphite: 'Графіт',
+  smoke: 'Дим',
+  'dark-sage': 'Темна шавлія',
 } as const;
+export const backgroundGroups = [
+  { label: 'Градієнти', values: ['quiet', 'dawn', 'forest', 'lavender', 'ocean'] },
+  { label: 'Природа', values: ['mountains', 'lake', 'dunes', 'woodland'] },
+  { label: 'Світлі абстрактні', values: ['wave', 'silk', 'slate', 'sage'] },
+  { label: 'Темні абстрактні', values: ['graphite', 'smoke', 'dark-sage'] },
+] as const;
 function read(): Background {
   try {
     const value = localStorage.getItem('quiet.background');
