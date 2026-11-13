@@ -1,3 +1,4 @@
+import { openNewDocument } from './helpers';
 import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -219,7 +220,7 @@ test('whitespace-only note and document titles remain valid after saving and reo
   await expect(page.locator('.save-status')).toContainText('Saved on this device');
   await page.locator('.project-link').filter({ hasText: 'Preview project' }).click();
   await page.getByRole('button', { name: /^Documents/ }).click();
-  await page.getByRole('button', { name: 'New document', exact: true }).click();
+  await openNewDocument(page);
   await page.getByRole('textbox', { name: 'Document title' }).fill('   ');
   await expect(page.getByRole('textbox', { name: 'Document title' })).toHaveValue('Untitled');
   await page.getByRole('textbox', { name: 'Document content' }).fill('Keep this document');

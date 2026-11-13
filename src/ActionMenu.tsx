@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useId } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useId } from 'react';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 
@@ -6,16 +6,26 @@ export default function ActionMenu({
   label,
   items,
   primary = false,
+  showLabel = false,
 }: {
   label: string;
   items: { label: string; icon: IconName; action: () => void; danger?: boolean }[];
   primary?: boolean;
+  showLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const id = useId();
+
+  useLayoutEffect(() => {
+    if (!open || !wrapper.current || !menu.current) return;
+    const rect = wrapper.current.getBoundingClientRect();
+    const height = menu.current.offsetHeight;
+    setAbove(rect.bottom + height + 12 > window.innerHeight && rect.top > height + 12);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +47,9 @@ export default function ActionMenu({
     >
       <button
         ref={trigger}
-        className={primary ? 'button primary quick-create' : 'icon-button'}
+        className={
+          primary ? 'button primary quick-create' : showLabel ? 'button secondary' : 'icon-button'
+        }
         aria-label={label}
         title={label}
         aria-haspopup="menu"
@@ -51,8 +63,11 @@ export default function ActionMenu({
           }
         }}
       >
-        <Icon name={primary ? 'plus' : 'more'} size={primary ? 17 : 19} />
-        {primary && (
+        <Icon
+          name={primary || showLabel ? 'plus' : 'more'}
+          size={primary ? 17 : showLabel ? 16 : 19}
+        />
+        {(primary || showLabel) && (
           <>
             <span>{label}</span>
             <Icon name="down" size={13} />
@@ -65,7 +80,7 @@ export default function ActionMenu({
           id={id}
           role="menu"
           aria-label={label}
-          className="dropdown"
+          className={`dropdown ${above ? 'opens-up' : ''}`}
           onKeyDown={(event) => {
             const buttons = [
               ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),

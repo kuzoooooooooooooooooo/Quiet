@@ -1,3 +1,4 @@
+import { openNewDocument } from './helpers';
 import { resumeProject, seedWorkspace } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -10,7 +11,7 @@ async function start(page: Page) {
   await expect(page.locator('.home-project-list')).toBeEmpty();
   await createProject(page, 'Мій workspace');
   await page.getByRole('button', { name: /^Документи/ }).click();
-  await page.getByRole('button', { name: 'Новий документ', exact: true }).click();
+  await openNewDocument(page);
   await page.getByRole('textbox', { name: 'Назва документа' }).fill('Нотатки');
   await page.getByRole('textbox', { name: 'Вміст документа' }).fill('# Рішення\n\nRust + SQLite');
   await page.getByRole('button', { name: 'Огляд', exact: true }).click();
@@ -42,7 +43,7 @@ test('project → task → document → reload preserves content and context', a
   await page.getByRole('button', { name: 'Додати', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Зібрати перший прототип' }).click();
   await page.getByRole('button', { name: /^Документи/ }).click();
-  await page.getByRole('button', { name: 'Новий документ', exact: true }).click();
+  await openNewDocument(page);
   await page.getByRole('textbox', { name: 'Назва документа' }).fill('План реалізації');
   await page
     .getByRole('textbox', { name: 'Вміст документа' })

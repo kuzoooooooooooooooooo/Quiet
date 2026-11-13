@@ -1,3 +1,4 @@
+import { openNewDocument } from './helpers';
 import { settingsSection } from './helpers';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -60,7 +61,7 @@ test('English project, document, task, preview and search flows keep user conten
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByText('0 of 1 completed', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^Documents/ }).click();
-  await page.getByRole('button', { name: 'New document', exact: true }).click();
+  await openNewDocument(page);
   await expect(page.getByRole('textbox', { name: 'Document title' })).toHaveValue('Untitled');
   await page.getByRole('textbox', { name: 'Document title' }).fill('Власний план');
   await page.getByRole('textbox', { name: 'Document content' }).fill('SQLite\n\nМій перший крок');
