@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -68,8 +69,9 @@ test('empty and standard kits; hidden modules preserve content, search and edit 
   await page.getByRole('textbox', { name: 'Search workspace' }).press('Enter');
   await expect(page.getByText('Module is hidden', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Enable', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveText(
     'Hidden content survives',
+    { useInnerText: true },
   );
   await page.locator('.sidebar-nav').getByRole('button', { name: 'Notes', exact: true }).click();
   await expect(page.locator('.notes-layout')).toHaveCount(0);
@@ -216,7 +218,6 @@ test('multiple file upload, drag-and-drop, ZIP originals, batch delete and undo'
   await expect(page.locator('.material-row')).toHaveCount(3);
   await save(page);
 });
-
 test('new modules, board and full-window backgrounds fit mobile and both themes', async ({
   page,
 }) => {
@@ -236,7 +237,9 @@ test('new modules, board and full-window backgrounds fit mobile and both themes'
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Open projects', exact: true }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Ocean', exact: true }).check();
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

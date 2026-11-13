@@ -2,6 +2,9 @@ import type { Note } from './model';
 import { t } from './i18n';
 import { Icon } from './Icon';
 import ActionMenu from './ActionMenu';
+import RichEditor from './RichEditor';
+import { documentText, plainTextHtml } from './documentHtml';
+import { usePreferences } from './preferences';
 export default function Notes({
   embedded = false,
   notes,
@@ -17,10 +20,11 @@ export default function Notes({
   selected: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
-  onChange: (id: string, patch: Partial<Pick<Note, 'title' | 'content'>>) => void;
+  onChange: (id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'format'>>) => void;
   onRename: (note: Note) => void;
   onDelete: (note: Note) => void;
 }) {
+  const { autoFormat } = usePreferences();
   const active = notes.find((note) => note.id === selected) ?? notes[0];
   const Root = embedded ? 'section' : 'main';
   return (
@@ -44,7 +48,11 @@ export default function Notes({
                 data-context-id={note.id}
               >
                 <strong>{note.title}</strong>
-                <small>{note.content.split('\n').find((line) => line.trim()) || '\u00a0'}</small>
+                <small>
+                  {documentText(note)
+                    .split('\n')
+                    .find((line) => line.trim()) || '\u00a0'}
+                </small>
               </button>
             ))}
           </aside>
@@ -74,12 +82,13 @@ export default function Notes({
                   ]}
                 />
               </div>
-              <textarea
+              <RichEditor
                 key={active.id}
-                aria-label={t('Текст нотатки')}
-                value={active.content}
-                maxLength={1000000}
-                onChange={(event) => onChange(active.id, { content: event.target.value })}
+                label={t('Текст нотатки')}
+                compact
+                autoFormat={autoFormat}
+                content={active.format === 'html' ? active.content : plainTextHtml(active.content)}
+                onChange={(content) => onChange(active.id, { content, format: 'html' })}
               />
             </article>
           )}

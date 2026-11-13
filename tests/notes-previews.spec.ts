@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { zipSync, strToU8 } from 'fflate';
@@ -50,8 +51,9 @@ test('plain notes are separate, persist, search, rename, delete and undo; launch
   await expect(dialog).toHaveCount(1);
   await page.getByRole('textbox', { name: 'Search workspace' }).fill('Kyoto');
   await page.getByRole('textbox', { name: 'Search workspace' }).press('Enter');
-  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveText(
     'Plain text\nKyoto research',
+    { useInnerText: true },
   );
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
@@ -69,15 +71,17 @@ test('plain notes are separate, persist, search, rename, delete and undo; launch
   await page.getByRole('menuitem', { name: 'Delete note', exact: true }).click();
   await expect(page.locator('.notes-layout')).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveValue(
+  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveText(
     'Plain text\nKyoto research',
+    { useInnerText: true },
   );
 });
-
 test('backgrounds persist separately from theme and removed UI stays absent', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Lavender', exact: true }).check();
+  await settingsSection(page, 'appearance');
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await expect(page.locator('html')).toHaveAttribute('data-background', 'lavender');
   await expect(page.getByText('Check and install new versions here.', { exact: true })).toHaveCount(
@@ -223,7 +227,9 @@ test('whitespace-only note and document titles remain valid after saving and reo
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
   await page.locator('.sidebar-nav').getByRole('button', { name: 'Notes', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveValue('Keep this note');
+  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveText('Keep this note', {
+    useInnerText: true,
+  });
   await page.locator('.project-link').filter({ hasText: 'Preview project' }).click();
   await page.getByRole('button', { name: /^Documents/ }).click();
   await expect(page.getByRole('textbox', { name: 'Document content' })).toHaveText(

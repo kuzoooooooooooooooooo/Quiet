@@ -71,6 +71,13 @@ impl ProjectKit {
         {
             return fail();
         }
+        if self
+            .notes
+            .iter()
+            .any(|note| note.format.as_deref().is_some_and(|f| f != "html"))
+        {
+            return fail();
+        }
         for list_len in [self.notes.len(), self.snippets.len(), self.tables.len()] {
             if list_len > 5000 {
                 return fail();

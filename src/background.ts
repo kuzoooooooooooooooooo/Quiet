@@ -1,6 +1,29 @@
 import { useEffect, useState } from 'react';
-export const backgrounds = ['quiet', 'dawn', 'forest', 'lavender', 'ocean'] as const;
+export const backgrounds = [
+  'quiet',
+  'dawn',
+  'forest',
+  'lavender',
+  'ocean',
+  'mountains',
+  'lake',
+  'dunes',
+  'woodland',
+  'wave',
+] as const;
 export type Background = (typeof backgrounds)[number];
+export const backgroundLabels = {
+  quiet: 'Стандартний',
+  dawn: 'Світанок',
+  forest: 'Ліс',
+  lavender: 'Лаванда',
+  ocean: 'Океан',
+  mountains: 'Туманні гори',
+  lake: 'Озеро',
+  dunes: 'Дюни',
+  woodland: 'Ліс у тумані',
+  wave: 'Хвиля',
+} as const;
 function read(): Background {
   try {
     const value = localStorage.getItem('quiet.background');

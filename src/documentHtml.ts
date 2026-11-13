@@ -69,6 +69,13 @@ export function cleanHtml(value: string): string {
   holder.append(fragment);
   return holder.innerHTML;
 }
+export function plainTextHtml(value: string): string {
+  return (
+    '<p>' +
+    value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`).replace(/\r\n?|\n/g, '<br>') +
+    '</p>'
+  );
+}
 export async function markdownHtml(value: string) {
   const { marked } = await import('marked');
   return cleanHtml(marked.parse(value, { async: false, breaks: true }));

@@ -8,6 +8,7 @@ export type Tab =
   'overview' | 'documents' | 'tasks' | 'materials' | 'notes' | 'snippets' | 'tables';
 export type Tone = 'green' | 'blue' | 'orange' | 'violet';
 export interface Note {
+  format?: 'html';
   id: string;
   title: string;
   content: string;
@@ -116,6 +117,7 @@ export function validateWorkspace(input: unknown, allowStoredFiles = false): Wor
       !isText(note.title) ||
       !note.title.trim() ||
       !isText(note.content) ||
+      (note.format !== undefined && note.format !== 'html') ||
       !isDate(note.createdAt) ||
       !isDate(note.updatedAt)
     )
@@ -225,7 +227,7 @@ export function searchWorkspace(workspace: Workspace, query: string): SearchResu
         projectId: p.id,
         kind: 'note' as const,
         title: row.title,
-        detail: row.content,
+        detail: documentText(row),
       })),
       ...(p.kit?.snippets ?? []).map((row) => ({
         id: row.id,
@@ -247,7 +249,7 @@ export function searchWorkspace(workspace: Workspace, query: string): SearchResu
       projectId: null,
       kind: 'note' as const,
       title: note.title,
-      detail: note.content,
+      detail: documentText(note),
     })),
     ...workspace.projects.map((p) => ({
       id: p.id,

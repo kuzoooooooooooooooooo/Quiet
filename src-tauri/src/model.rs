@@ -4,6 +4,8 @@ use std::collections::HashSet;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Note {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
     pub id: String,
     pub title: String,
     pub content: String,
@@ -146,6 +148,13 @@ impl Workspace {
         }
         if ids.len() > 50_000 {
             return Err("Too many workspace records".into());
+        }
+        if self
+            .notes
+            .iter()
+            .any(|note| note.format.as_deref().is_some_and(|f| f != "html"))
+        {
+            return Err("Invalid note format".into());
         }
         if self.notes.iter().any(|note| note.title.trim().is_empty()) {
             return Err("Empty note title".into());

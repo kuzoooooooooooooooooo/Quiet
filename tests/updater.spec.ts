@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -40,6 +41,7 @@ async function fakeUpdater(
 }
 async function settings(page: Page) {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(page, 'updates');
 }
 async function calls(page: Page, key: string) {
   return page.evaluate(
@@ -57,6 +59,7 @@ test('browser settings explain native updates without making update requests', a
   await page.goto('/');
   await expect(page.locator('.home-project-list')).toBeEmpty();
   await page.getByRole('button', { name: 'Налаштування', exact: true }).click();
+  await settingsSection(page, 'updates');
   await expect(page.getByText('Оновлення доступні у Windows-додатку.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Перевірити оновлення' })).toHaveCount(0);
   expect(requests).toBe(0);

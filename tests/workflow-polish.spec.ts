@@ -1,3 +1,4 @@
+import { settingsSection } from './helpers';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -58,7 +59,6 @@ test('create a named table from an empty project, validate dimensions and preser
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('textbox', { name: 'Table title' })).toHaveValue('Options');
 });
-
 test('document typing shortcuts are optional, persistent, undoable and keep manual formatting', async ({
   page,
 }) => {
@@ -69,10 +69,10 @@ test('document typing shortcuts are optional, persistent, undoable and keep manu
   await editor.pressSequentially('# Literal **text**');
   await expect(editor.locator('h1,strong,b')).toHaveCount(0);
   await settings(page);
-  await expect(
-    page.getByRole('checkbox', { name: 'Automatic document formatting' }),
-  ).not.toBeChecked();
-  await page.getByRole('checkbox', { name: 'Automatic document formatting' }).check();
+  await settingsSection(page, 'editor');
+  await expect(page.getByRole('checkbox', { name: 'Automatic text formatting' })).not.toBeChecked();
+  await settingsSection(page, 'editor');
+  await page.getByRole('checkbox', { name: 'Automatic text formatting' }).check();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await editor.fill('');
   await editor.pressSequentially('## ');
@@ -98,7 +98,8 @@ test('document typing shortcuts are optional, persistent, undoable and keep manu
   await expect(editor).toContainText('Bold words plain');
   await saved(page);
   await settings(page);
-  await page.getByRole('checkbox', { name: 'Automatic document formatting' }).uncheck();
+  await settingsSection(page, 'editor');
+  await page.getByRole('checkbox', { name: 'Automatic text formatting' }).uncheck();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(editor.locator('b,strong')).toHaveText('Bold words');
   await editor.focus();
@@ -110,11 +111,9 @@ test('document typing shortcuts are optional, persistent, undoable and keep manu
   await page.locator('.home-project').click();
   await expect(editor.locator('b,strong')).toHaveText('Bold words');
   await settings(page);
-  await expect(
-    page.getByRole('checkbox', { name: 'Automatic document formatting' }),
-  ).not.toBeChecked();
+  await settingsSection(page, 'editor');
+  await expect(page.getByRole('checkbox', { name: 'Automatic text formatting' })).not.toBeChecked();
 });
-
 test('hiding personal notes keeps their content and leaves project notes available', async ({
   page,
 }) => {
@@ -125,6 +124,7 @@ test('hiding personal notes keeps their content and leaves project notes availab
   await page.getByRole('textbox', { name: 'Note content' }).fill('Keep this intact');
   await saved(page);
   await settings(page);
+  await settingsSection(page, 'general');
   await page.getByRole('checkbox', { name: 'Show personal notes' }).uncheck();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.locator('.home-page')).toBeVisible();
@@ -148,11 +148,14 @@ test('hiding personal notes keeps their content and leaves project notes availab
   await page.getByRole('button', { name: 'New note', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Note content' })).toBeVisible();
   await settings(page);
+  await settingsSection(page, 'general');
   await page.getByRole('checkbox', { name: 'Show personal notes' }).check();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('.sidebar-nav').getByRole('button', { name: 'Notes', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Note title' })).toHaveValue('Private thought');
-  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveValue('Keep this intact');
+  await expect(page.getByRole('textbox', { name: 'Note content' })).toHaveText('Keep this intact', {
+    useInnerText: true,
+  });
 });
 
 test('completed tasks collapse, reopen in search across projects and can become active again', async ({
@@ -221,7 +224,6 @@ test('home filters projects, remembers cards/list and sorts by recent opening or
   await expect(page.getByRole('combobox', { name: 'Sort projects' })).toHaveValue('recent');
   await expect(page.locator('.home-project strong')).toHaveText(['Alpha', 'Zulu']);
 });
-
 test('typing shortcuts leave pasted and composing text intact and are saved when enabled', async ({
   page,
 }) => {
@@ -229,7 +231,8 @@ test('typing shortcuts leave pasted and composing text intact and are saved when
   await project(page, 'Input');
   await doc(page);
   await settings(page);
-  await page.getByRole('checkbox', { name: 'Automatic document formatting' }).check();
+  await settingsSection(page, 'editor');
+  await page.getByRole('checkbox', { name: 'Automatic text formatting' }).check();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   const editor = page.getByRole('textbox', { name: 'Document content' });
   await editor.focus();
@@ -260,7 +263,8 @@ test('typing shortcuts leave pasted and composing text intact and are saved when
   await page.locator('.home-project').click();
   await expect(editor.locator('b,strong')).toHaveText('Saved bold');
   await settings(page);
-  await expect(page.getByRole('checkbox', { name: 'Automatic document formatting' })).toBeChecked();
+  await settingsSection(page, 'editor');
+  await expect(page.getByRole('checkbox', { name: 'Automatic text formatting' })).toBeChecked();
 });
 
 for (const language of ['en', 'uk']) {
@@ -270,8 +274,10 @@ for (const language of ['en', 'uk']) {
     await page.goto('/');
     await project(page, 'Interface');
     await settings(page);
+    await settingsSection(page, 'general');
     await page.getByRole('combobox', { name: 'Language' }).selectOption(language);
     const uk = language === 'uk';
+    await settingsSection(page, 'appearance');
     await page.getByRole('radio', { name: uk ? 'Темна' : 'Dark', exact: true }).check();
     await page.getByRole('button', { name: uk ? 'Закрити' : 'Close', exact: true }).click();
     for (const size of [
