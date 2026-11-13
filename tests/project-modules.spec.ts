@@ -40,7 +40,9 @@ test('empty and standard kits; hidden modules preserve content, search and edit 
   await expect(
     page.getByRole('navigation', { name: 'Project sections' }).getByRole('button'),
   ).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Create', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByRole('menuitem')).toHaveText(['New table']);
+  await page.keyboard.press('Escape');
   await modules(page);
   await page.getByRole('checkbox', { name: 'Notes', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Documents', exact: true }).check();
@@ -100,6 +102,7 @@ test('project snippets, tables and notes persist independently and are searchabl
   );
   await tab(page, 'Tables');
   await page.getByRole('button', { name: 'New table', exact: true }).click();
+  await page.getByRole('button', { name: 'Create table', exact: true }).click();
   await page.getByRole('textbox', { name: 'Table title' }).fill('Comparison');
   await page.getByRole('button', { name: 'Add row', exact: true }).click();
   await page.getByRole('textbox', { name: 'Cell 1, 1', exact: true }).fill('SQLite');
@@ -165,10 +168,12 @@ test('task board shares records with list and remembers each project view and or
   await page.locator('.project-link').filter({ hasText: 'Board' }).click();
   await expect(page.locator('.board-column').nth(1)).toContainText('Zulu');
   await page.getByRole('button', { name: 'List', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Alpha', exact: true })).toBeHidden();
+  await page.locator('.completed-tasks > summary').click();
   await expect(page.locator('.task-row .inline-name-button > span')).toHaveText([
-    'Alpha',
     'Zulu',
     'Middle',
+    'Alpha',
   ]);
 });
 
@@ -219,6 +224,7 @@ test('new modules, board and full-window backgrounds fit mobile and both themes'
   await project(page, 'Mobile', ['Notes', 'Code snippets', 'Tables', 'Tasks']);
   await tab(page, 'Tables');
   await page.getByRole('button', { name: 'New table', exact: true }).click();
+  await page.getByRole('button', { name: 'Create table', exact: true }).click();
   await page.getByRole('button', { name: 'Add row', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

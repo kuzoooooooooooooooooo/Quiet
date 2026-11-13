@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProjectKit, ModuleId, Snippet, Sheet, Sort } from './projectKit';
 import { arrange, moduleIds, moduleLabels, defaultModules } from './projectKit';
 import { now, uid } from './model';
@@ -87,18 +87,21 @@ export default function ProjectModules({
   onChange,
   onRemove,
   notify,
+  onCreateTable,
 }: {
   kind: 'notes' | 'snippets' | 'tables';
   kit: ProjectKit;
   onChange: (kit: ProjectKit) => void;
   onRemove: (kind: 'notes' | 'snippets' | 'tables', id: string) => void;
   notify: (message: string) => void;
+  onCreateTable: () => void;
 }) {
   const [context, setContext] = useState<ContextState | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
   const rows = arrange<Note | Snippet | Sheet>(kit[kind], kit, kind);
   const active = rows.find((r) => r.id === kit.preferences.active?.[kind]) ?? rows[0];
+  useEffect(() => setPage(0), [active?.id]);
   const select = (id: string) => {
     setPage(0);
     onChange({
@@ -132,32 +135,19 @@ export default function ProjectModules({
     });
   };
   const create = () => {
+    if (kind === 'tables') {
+      onCreateTable();
+      return;
+    }
     const stamp = now(),
       base = {
         id: uid(),
-        title: t(
-          kind === 'notes'
-            ? 'Нова нотатка'
-            : kind === 'snippets'
-              ? 'Новий фрагмент коду'
-              : 'Нова таблиця',
-        ),
+        title: t(kind === 'notes' ? 'Нова нотатка' : 'Новий фрагмент коду'),
         createdAt: stamp,
         updatedAt: stamp,
       };
     const row =
-      kind === 'notes'
-        ? { ...base, content: '' }
-        : kind === 'snippets'
-          ? { ...base, content: '', language: 'text' }
-          : {
-              ...base,
-              columns: [
-                { id: uid(), title: t('Стовпець') + ' 1' },
-                { id: uid(), title: t('Стовпець') + ' 2' },
-              ],
-              rows: [],
-            };
+      kind === 'notes' ? { ...base, content: '' } : { ...base, content: '', language: 'text' };
     onChange({
       ...kit,
       [kind]: [row, ...kit[kind]],

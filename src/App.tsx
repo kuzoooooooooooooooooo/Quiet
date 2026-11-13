@@ -26,6 +26,11 @@ import { downloadBlob, isDesktop, loadWorkspace, openExternal, saveWorkspace } f
 import { useTheme } from './theme';
 import type { Theme } from './theme';
 import Notes from './Notes';
+import HomeProjects from './HomeProjects';
+import TableForm from './TableForm';
+import CompletedTasks from './CompletedTasks';
+import { usePreferences, updatePreferences, markProjectOpened } from './preferences';
+import type { Preferences } from './preferences';
 import ProjectModules, { ModulePicker, SortControl, reorder } from './ProjectModules';
 import { arrange, getKit, enabled, defaultModules } from './projectKit';
 import type { ProjectKit, ModuleId } from './projectKit';
@@ -49,6 +54,7 @@ type ModalState =
   | { type: 'project'; project?: Project }
   | { type: 'delete-project'; project: Project }
   | { type: 'material' }
+  | { type: 'table'; projectId: string }
   | { type: 'bulk-delete' }
   | { type: 'shortcuts' }
   | { type: 'settings' }
@@ -450,6 +456,8 @@ export default function App() {
   const [noteId, setNoteId] = useState<string | null>(null);
   const { collapsed, toggleSidebar } = useSidebar();
   const { language, selectLanguage } = useLanguage();
+  const preferences = usePreferences();
+  const [completedOpen, setCompletedOpen] = useState(false);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loadError, setLoadError] = useState('');
   const [writeStatus, setStatus] = useState<SaveStatus>('saved');
@@ -615,7 +623,14 @@ export default function App() {
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     const id = setTimeout(() => setHighlight(null), 2400);
     return () => clearTimeout(id);
-  }, [highlight, workspace?.context.tab]);
+  }, [highlight, workspace?.context.tab, completedOpen]);
+  useEffect(() => {
+    if (view === 'notes' && !preferences.showNotes) setView('home');
+  }, [preferences.showNotes, view]);
+  useEffect(() => {
+    const id = workspace?.context.projectId;
+    if (view === 'project' && id) markProjectOpened(id);
+  }, [view, workspace?.context.projectId]);
   useEffect(() => {
     const reveal = () =>
       document
@@ -628,6 +643,11 @@ export default function App() {
   useEffect(() => {
     setTaskTitle('');
     setTaskFilter('all');
+    setCompletedOpen(
+      !!workspace?.tasks.find(
+        (task) => task.id === highlight && task.projectId === workspace.context.projectId,
+      )?.done,
+    );
     setSelectedFiles(new Set());
     setModal((current) => (current?.type === 'bulk-delete' ? null : current));
     setPreview(false);
@@ -697,6 +717,49 @@ export default function App() {
   const activeTasks = tasks.filter((t) => !t.done);
   const closeModal = () => setModal(null);
 
+  function savePreferences(patch: Partial<Preferences>) {
+    if (!updatePreferences(patch)) setNotification(t('Не вдалося зберегти налаштування.'));
+  }
+  function createTable(projectId: string, title: string, rowCount: number, columnCount: number) {
+    const stamp = now(),
+      table = {
+        id: uid(),
+        title,
+        createdAt: stamp,
+        updatedAt: stamp,
+        columns: Array.from({ length: columnCount }, (_, i) => ({
+          id: uid(),
+          title: t('Стовпець') + ' ' + (i + 1),
+        })),
+        rows: Array.from({ length: rowCount }, () => ({
+          id: uid(),
+          cells: Array.from({ length: columnCount }, () => ''),
+        })),
+      };
+    update((w) => ({
+      ...w,
+      projects: w.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        const k = getKit(p);
+        return {
+          ...p,
+          kit: {
+            ...k,
+            enabled: k.enabled.includes('tables') ? k.enabled : [...k.enabled, 'tables'],
+            tables: [table, ...k.tables],
+            preferences: {
+              ...k.preferences,
+              lastTab: 'tables',
+              active: { ...k.preferences.active, tables: table.id },
+            },
+          },
+        };
+      }),
+      context: { projectId, tab: 'tables', documentId: null },
+    }));
+    setView('project');
+    closeModal();
+  }
   function writeKit(next: ProjectKit) {
     if (!project) return;
     update((w) => ({
@@ -714,6 +777,14 @@ export default function App() {
           : kind === 'materials'
             ? materials
             : kit[kind];
+    if (kind === 'tasks' && kit.preferences.taskView !== 'board') {
+      const current = tasks.find((t) => t.id === id);
+      if (!current) return;
+      const group = tasks.filter((t) => t.done === current.done),
+        neighbor = group[group.findIndex((t) => t.id === id) + delta];
+      if (!neighbor) return;
+      delta = rows.findIndex((t) => t.id === neighbor.id) - rows.findIndex((t) => t.id === id);
+    }
     writeKit(
       reorder(
         kit,
@@ -1276,6 +1347,9 @@ export default function App() {
       },
     }));
     setTaskFilter('all');
+    setCompletedOpen(
+      result.kind === 'task' && !!workspace?.tasks.find((t) => t.id === result.id)?.done,
+    );
     setPreview(false);
     setHighlight(result.id);
     setSearchOpen(false);
@@ -1385,18 +1459,20 @@ export default function App() {
             <Icon name="home" size={17} />
             <span className="rail-label">{t('Головна')}</span>
           </button>
-          <button
-            className={view === 'notes' ? 'active' : ''}
-            aria-current={view === 'notes' ? 'page' : undefined}
-            title={t('Нотатки')}
-            onClick={() => {
-              setView('notes');
-              setSidebarOpen(false);
-            }}
-          >
-            <Icon name="note" size={17} />
-            <span className="rail-label">{t('Нотатки')}</span>
-          </button>
+          {preferences.showNotes && (
+            <button
+              className={view === 'notes' ? 'active' : ''}
+              aria-current={view === 'notes' ? 'page' : undefined}
+              title={t('Нотатки')}
+              onClick={() => {
+                setView('notes');
+                setSidebarOpen(false);
+              }}
+            >
+              <Icon name="note" size={17} />
+              <span className="rail-label">{t('Нотатки')}</span>
+            </button>
+          )}
         </nav>
         <div className="sidebar-section-heading">
           <span>{t('ПРОЄКТИ')}</span>
@@ -1516,37 +1592,15 @@ export default function App() {
             onDelete={deleteNote}
           />
         ) : !project ? (
-          <main className="main-content home-page" aria-label={t('Головна')}>
-            <div className="content-heading">
-              <h1>{t('Головна')}</h1>
-              <button
-                className="button secondary"
-                aria-label={t('Новий проєкт')}
-                onClick={() => setModal({ type: 'project' })}
-              >
-                <Icon name="plus" size={16} />
-                {t('Новий проєкт')}
-              </button>
-            </div>
-            <div className="home-project-list">
-              {workspace.projects.map((p) => (
-                <button
-                  key={p.id}
-                  className="home-project"
-                  data-context-kind="project"
-                  data-context-id={p.id}
-                  onClick={() => selectProject(p.id)}
-                >
-                  <span className={`project-dot ${p.tone}`} />
-                  <span>
-                    <strong>{p.name}</strong>
-                    {p.description && <small>{p.description}</small>}
-                  </span>
-                  <Icon name="chevron" size={16} />
-                </button>
-              ))}
-            </div>
-          </main>
+          <HomeProjects
+            projects={workspace.projects}
+            preferences={preferences}
+            onPreferences={savePreferences}
+            onCreate={() => setModal({ type: 'project' })}
+            onOpen={selectProject}
+            onEdit={(project) => setModal({ type: 'project', project })}
+            onDelete={(project) => setModal({ type: 'delete-project', project })}
+          />
         ) : (
           <main className="main-content">
             <div className="project-header">
@@ -1567,33 +1621,37 @@ export default function App() {
                 {project.description && <p>{project.description}</p>}
               </div>
               <div className="project-actions">
-                {getKit(project).enabled.some((m) =>
-                  ['tasks', 'documents', 'materials'].includes(m),
-                ) && (
-                  <ActionMenu
-                    key={`create-${project.id}`}
-                    label={t('Створити')}
-                    primary
-                    items={[
-                      { label: t('Нове завдання'), icon: 'circle' as const, action: focusTask },
-                      { label: t('Новий документ'), icon: 'file' as const, action: createDocument },
-                      {
-                        label: t('Додати посилання'),
-                        icon: 'link' as const,
-                        action: () => {
-                          selectTab('materials');
-                          setModal({ type: 'material' });
-                        },
+                <ActionMenu
+                  key={`create-${project.id}`}
+                  label={t('Створити')}
+                  primary
+                  items={[
+                    { label: t('Нове завдання'), icon: 'circle' as const, action: focusTask },
+                    { label: t('Новий документ'), icon: 'file' as const, action: createDocument },
+                    {
+                      label: t('Додати посилання'),
+                      icon: 'link' as const,
+                      action: () => {
+                        selectTab('materials');
+                        setModal({ type: 'material' });
                       },
-                      {
-                        label: t('Файл'),
-                        icon: 'upload' as const,
-                        action: () => {
-                          selectTab('materials');
-                          fileInput.current?.click();
-                        },
+                    },
+                    {
+                      label: t('Файл'),
+                      icon: 'upload' as const,
+                      action: () => {
+                        selectTab('materials');
+                        fileInput.current?.click();
                       },
-                    ].filter((item) =>
+                    },
+                    {
+                      label: t('Нова таблиця'),
+                      icon: 'grid' as const,
+                      action: () => setModal({ type: 'table', projectId: project.id }),
+                    },
+                  ].filter(
+                    (item) =>
+                      item.icon === 'grid' ||
                       enabled(
                         project,
                         item.icon === 'circle'
@@ -1602,9 +1660,8 @@ export default function App() {
                             ? 'documents'
                             : 'materials',
                       ),
-                    )}
-                  />
-                )}
+                  )}
+                />
                 <ActionMenu
                   key={`project-${project.id}`}
                   label={t('Меню проєкту')}
@@ -1682,7 +1739,7 @@ export default function App() {
                         </div>
                         <div className="task-preview">
                           {tasks.length ? (
-                            [...activeTasks, ...tasks.filter((t) => t.done)]
+                            activeTasks
                               .slice(0, 5)
                               .map((task) => (
                                 <TaskRow
@@ -1698,6 +1755,21 @@ export default function App() {
                             <p className="inline-empty">{t('Немає завдань')}</p>
                           )}
                         </div>
+                        <CompletedTasks
+                          tasks={tasks.filter((t) => t.done)}
+                          expanded={completedOpen}
+                          onExpanded={setCompletedOpen}
+                          render={(task) => (
+                            <TaskRow
+                              key={task.id}
+                              task={task}
+                              onToggle={() => toggleTask(task.id)}
+                              onDelete={() => deleteTask(task.id)}
+                              onRename={(value) => renameTask(task.id, value)}
+                              highlight={highlight === task.id}
+                            />
+                          )}
+                        />
                         <button className="panel-add" onClick={focusTask}>
                           <Icon name="plus" size={16} />
 
@@ -1825,6 +1897,7 @@ export default function App() {
                     onChange={writeKit}
                     onRemove={removeKitRecord}
                     notify={setNotification}
+                    onCreateTable={() => setModal({ type: 'table', projectId: project.id })}
                   />
                 ),
             )}
@@ -1894,7 +1967,10 @@ export default function App() {
                       key={filter.id}
                       className={taskFilter === filter.id ? 'active' : ''}
                       aria-pressed={taskFilter === filter.id}
-                      onClick={() => setTaskFilter(filter.id)}
+                      onClick={() => {
+                        setTaskFilter(filter.id);
+                        setCompletedOpen(filter.id === 'done');
+                      }}
                     >
                       {filter.label}
                     </button>
@@ -1921,9 +1997,7 @@ export default function App() {
                     {' '}
                     <div className="task-list">
                       {tasks
-                        .filter(
-                          (t) => taskFilter === 'all' || (taskFilter === 'done' ? t.done : !t.done),
-                        )
+                        .filter((t) => taskFilter !== 'done' && !t.done)
                         .map((task) => (
                           <TaskRow
                             key={task.id}
@@ -1935,6 +2009,23 @@ export default function App() {
                           />
                         ))}
                     </div>
+                    {taskFilter !== 'active' && (
+                      <CompletedTasks
+                        tasks={tasks.filter((t) => t.done)}
+                        expanded={completedOpen}
+                        onExpanded={setCompletedOpen}
+                        render={(task) => (
+                          <TaskRow
+                            key={task.id}
+                            task={task}
+                            onToggle={() => toggleTask(task.id)}
+                            onDelete={() => deleteTask(task.id)}
+                            onRename={(value) => renameTask(task.id, value)}
+                            highlight={highlight === task.id}
+                          />
+                        )}
+                      />
+                    )}
                   </>
                 )}
                 {!tasks.filter(
@@ -2097,6 +2188,7 @@ export default function App() {
                           <RichPreview content={activeDocument.content} />
                         ) : (
                           <RichEditor
+                            autoFormat={preferences.autoFormat}
                             key={activeDocument.id}
                             content={activeDocument.content}
                             onChange={(content) => patchDocument({ content })}
@@ -2326,7 +2418,7 @@ export default function App() {
       </div>
       {searchOpen && (
         <Search
-          workspace={workspace}
+          workspace={preferences.showNotes ? workspace : { ...workspace, notes: [] }}
           onClose={() => setSearchOpen(false)}
           onSelect={selectResult}
         />
@@ -2342,6 +2434,14 @@ export default function App() {
               {t('Видалити вибрані')}
             </button>
           </div>
+        </Modal>
+      )}
+      {modal?.type === 'table' && (
+        <Modal title={t('Створити таблицю')} onClose={closeModal}>
+          <TableForm
+            onCancel={closeModal}
+            onSubmit={(title, rows, columns) => createTable(modal.projectId, title, rows, columns)}
+          />
         </Modal>
       )}
       {modal?.type === 'project' && (
@@ -2369,15 +2469,17 @@ export default function App() {
                   ? w.projects.map((item) => (item.id === p.id ? p : item))
                   : [...w.projects, p],
                 context:
-                  existing &&
-                  w.context.projectId === p.id &&
-                  (w.context.tab === 'overview' || modules.includes(w.context.tab))
+                  existing && view === 'home'
                     ? w.context
-                    : { projectId: p.id, tab: 'overview', documentId: null },
+                    : existing &&
+                        w.context.projectId === p.id &&
+                        (w.context.tab === 'overview' || modules.includes(w.context.tab))
+                      ? w.context
+                      : { projectId: p.id, tab: 'overview', documentId: null },
               }));
               closeModal();
               setSidebarOpen(false);
-              setView('project');
+              if (!existing || view !== 'home') setView('project');
             }}
           />
         </Modal>
@@ -2528,6 +2630,29 @@ export default function App() {
             <span>{t('Клавіатурні скорочення')}</span>
             <Icon name="chevron" size={15} />
           </button>
+          <fieldset className="behavior-settings">
+            <legend>{t('Нотатки')}</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={preferences.showNotes}
+                onChange={(e) => savePreferences({ showNotes: e.target.checked })}
+              />
+              <span>{t('Показувати загальні нотатки')}</span>
+            </label>
+          </fieldset>
+          <fieldset className="behavior-settings">
+            <legend>{t('Редактор')}</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={preferences.autoFormat}
+                onChange={(e) => savePreferences({ autoFormat: e.target.checked })}
+              />
+              <span>{t('Автоформатування документів')}</span>
+            </label>
+            <small>{t('Перетворювати #, -, 1. і ** під час введення.')}</small>
+          </fieldset>
           <UpdateSettings updater={updater} />
         </Modal>
       )}

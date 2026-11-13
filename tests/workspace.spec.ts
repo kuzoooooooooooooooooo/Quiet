@@ -60,6 +60,7 @@ test('project → task → document → reload preserves content and context', a
   await page.getByRole('button', { name: 'Перегляд', exact: true }).click();
   await expect(page.locator('.rich-content')).toContainText('Перша версія');
   await page.getByRole('button', { name: /^Завдання/ }).click();
+  await page.locator('.completed-tasks > summary').click();
   await expect(page.getByRole('checkbox', { name: 'Зібрати перший прототип' })).toBeChecked();
   expect(errors).toEqual([]);
 });

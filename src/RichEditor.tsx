@@ -4,6 +4,7 @@ import { t } from './i18n';
 import { Icon } from './Icon';
 import { safeUrl } from './model';
 import { openExternal } from './storage';
+import { autoFormatInput } from './autoFormat';
 
 export function RichPreview({ content }: { content: string }) {
   const [error, setError] = useState('');
@@ -29,11 +30,15 @@ export function RichPreview({ content }: { content: string }) {
 export default function RichEditor({
   content,
   onChange,
+  autoFormat = false,
 }: {
   content: string;
+  autoFormat?: boolean;
   onChange: (content: string) => void;
 }) {
   const editor = useRef<HTMLDivElement>(null);
+  const applying = useRef(false),
+    composing = useRef(false);
   const range = useRef<Range | null>(null);
   const emitted = useRef<string | null>(null);
   const [active, setActive] = useState<Record<string, boolean>>({});
@@ -94,7 +99,12 @@ export default function RichEditor({
       selection.addRange(range.current);
     }
     // Browser editing commands preserve the native undo stack in Chromium/WebView2.
-    document.execCommand(name, false, value);
+    applying.current = true;
+    try {
+      document.execCommand(name, false, value);
+    } finally {
+      applying.current = false;
+    }
     if (selection?.rangeCount) range.current = selection.getRangeAt(0).cloneRange();
     emit();
   }
@@ -263,7 +273,34 @@ export default function RichEditor({
         suppressContentEditableWarning
         className="rich-content"
         spellCheck
-        onInput={emit}
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={() => {
+          composing.current = false;
+        }}
+        onInput={(event) => {
+          if (applying.current) return;
+          const input = event.nativeEvent as InputEvent;
+          if (
+            autoFormat &&
+            !composing.current &&
+            !input.isComposing &&
+            ['insertText', 'insertCompositionText', 'insertReplacementText'].includes(
+              input.inputType,
+            )
+          ) {
+            applying.current = true;
+            try {
+              if (editor.current) autoFormatInput(editor.current);
+            } finally {
+              applying.current = false;
+            }
+            const selection = window.getSelection();
+            if (selection?.rangeCount) range.current = selection.getRangeAt(0).cloneRange();
+          }
+          emit();
+        }}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest('a')) e.preventDefault();
         }}

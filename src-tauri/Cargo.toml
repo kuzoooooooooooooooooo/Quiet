@@ -1,6 +1,6 @@
 [package]
 name = "quiet-workspace"
-version = "0.9.1"
+version = "0.10.0"
 description = "A small, local-first workspace"
 edition = "2021"
 rust-version = "1.85"
