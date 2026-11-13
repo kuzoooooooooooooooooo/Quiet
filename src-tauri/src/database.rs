@@ -19,7 +19,7 @@ impl Database {
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|e| e.to_string())?;
-        if version > 5 {
+        if version > 6 {
             return Err("Database was created by a newer version of Quiet".into());
         }
         if version == 0 {
@@ -55,6 +55,11 @@ impl Database {
         if version < 5 {
             connection
                 .execute_batch("PRAGMA user_version=5;")
+                .map_err(|e| e.to_string())?;
+        }
+        if version < 6 {
+            connection
+                .execute_batch("PRAGMA user_version=6;")
                 .map_err(|e| e.to_string())?;
         }
         Ok(Self { connection })
@@ -99,8 +104,18 @@ impl Database {
 
     pub fn save(&mut self, workspace: &Workspace) -> Result<(), String> {
         workspace.validate()?;
-        for material in &workspace.materials {
-            if let Some(hash) = material.url.strip_prefix("attachment:") {
+        let files = workspace
+            .materials
+            .iter()
+            .map(|m| (m.url.as_str(), m.size))
+            .chain(
+                workspace
+                    .documents
+                    .iter()
+                    .filter_map(|d| d.file.as_ref().map(|f| (f.url.as_str(), f.size))),
+            );
+        for (url, expected_size) in files {
+            if let Some(hash) = url.strip_prefix("attachment:") {
                 let size: Option<u64> = self
                     .connection
                     .query_row(
@@ -110,7 +125,7 @@ impl Database {
                     )
                     .optional()
                     .map_err(|e| e.to_string())?;
-                if size != Some(material.size) {
+                if size != Some(expected_size) {
                     return Err("Missing or mismatched attachment".into());
                 }
             }
@@ -226,6 +241,7 @@ mod tests {
                 created_at: "2026-11-07T10:00:00Z".into(),
             }],
             documents: vec![Document {
+                file: None,
                 id: "d1".into(),
                 project_id: "p1".into(),
                 title: "Рішення".into(),
@@ -407,7 +423,7 @@ mod tests {
                 db.connection
                     .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
                     .unwrap(),
-                5
+                6
             );
         }
         std::fs::remove_file(path).unwrap();

@@ -142,7 +142,11 @@ export async function pruneAttachments(workspace: Workspace): Promise<void> {
     await invoke('prune_attachments');
     return;
   }
-  const keep = new Set(workspace.materials.map((m) => storedFile.exec(m.url)?.[1]).filter(Boolean));
+  const urls = [
+    ...workspace.materials.map((m) => m.url),
+    ...workspace.documents.flatMap((d) => (d.file ? [d.file.url] : [])),
+  ];
+  const keep = new Set(urls.map((url) => storedFile.exec(url)?.[1]).filter(Boolean));
   const db = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('attachments', 'readwrite');

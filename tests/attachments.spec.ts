@@ -59,7 +59,7 @@ test('attachments use compressed binary storage, deduplicate and export original
   const original = Buffer.from('Repeated text for lossless compression.\n'.repeat(4000));
   for (const name of ['first.txt', 'same.txt']) {
     await page
-      .locator('input[type=file]')
+      .locator('input[type=file]:not([data-document-upload])')
       .first()
       .setInputFiles({ name, mimeType: 'text/plain', buffer: original });
     await expect(page.locator('.material-row')).toContainText([name]);
@@ -88,7 +88,7 @@ test('incompressible and empty files round-trip with no extra compression overhe
     ['empty.bin', Buffer.alloc(0)],
   ] as const) {
     await page
-      .locator('input[type=file]')
+      .locator('input[type=file]:not([data-document-upload])')
       .first()
       .setInputFiles({ name, mimeType: 'application/octet-stream', buffer });
     await expect(page.locator('.material-row')).toContainText([name]);
@@ -191,7 +191,7 @@ test('version-one IndexedDB files migrate without losing legacy documents or att
 test('corrupt file contents are reported without downloading damaged bytes', async ({ page }) => {
   await start(page);
   await page
-    .locator('input[type=file]')
+    .locator('input[type=file]:not([data-document-upload])')
     .first()
     .setInputFiles({ name: 'test.txt', mimeType: 'text/plain', buffer: Buffer.from('valid data') });
   await expect(page.locator('.material-row')).toHaveCount(1);

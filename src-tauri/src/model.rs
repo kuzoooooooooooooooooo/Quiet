@@ -38,7 +38,19 @@ pub enum Tone {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct DocumentFile {
+    pub url: String,
+    pub size: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_size: Option<u64>,
+    pub file_type: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Document {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<DocumentFile>,
     pub id: String,
     pub project_id: String,
     pub title: String,
@@ -194,6 +206,28 @@ impl Workspace {
                 .is_some_and(|f| f != "html" && f != "markdown")
         }) {
             return Err("Unsupported document format".into());
+        }
+        for doc in &self.documents {
+            if let Some(file) = &doc.file {
+                let hash_valid = file.url.strip_prefix("attachment:").is_some_and(|hash| {
+                    hash.len() == 64
+                        && hash
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                });
+                if !hash_valid
+                    || file.size > 25 * 1024 * 1024
+                    || file.stored_size.is_some_and(|size| size > file.size)
+                    || !["pdf", "docx"].contains(&file.file_type.as_str())
+                    || file.name.trim().is_empty()
+                    || file.name.chars().count() > 255
+                    || file.name.rsplit('.').next().unwrap_or("").to_lowercase() != file.file_type
+                    || !doc.content.is_empty()
+                    || doc.format.is_some()
+                {
+                    return Err("Invalid document attachment".into());
+                }
+            }
         }
         for material in &self.materials {
             match material.kind {

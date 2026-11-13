@@ -66,7 +66,11 @@ function Content({ blob, type, title }: { blob: Blob; type: string; title: strin
     return <pre className="text-preview">{text}</pre>;
   return <p className="preview-error">{t('Для цього типу файлу доступне завантаження.')}</p>;
 }
-export default function FilePreview({ material }: { material: Material }) {
+export default function FilePreview({
+  material,
+}: {
+  material: Pick<Material, 'url' | 'size' | 'title' | 'fileType'>;
+}) {
   const [blob, setBlob] = useState<Blob | null>(null),
     [error, setError] = useState('');
   useEffect(() => {

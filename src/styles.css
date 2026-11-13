@@ -3607,3 +3607,38 @@ kbd {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+.document-list-label {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.document-list-label small {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.uploaded-document-heading {
+  padding: 20px 24px 0;
+}
+.uploaded-document > .file-preview {
+  padding: 12px 24px 24px;
+}
+.uploaded-document .file-preview-toolbar {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.uploaded-document .pdf-preview {
+  min-height: 60vh;
+  width: 100%;
+}
+@media (max-width: 600px) {
+  .uploaded-document-heading {
+    padding: 16px 10px 0;
+  }
+  .uploaded-document > .file-preview {
+    padding: 12px 10px;
+  }
+}

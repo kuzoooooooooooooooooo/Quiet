@@ -201,7 +201,7 @@ test('documents, tasks and materials expose rename and delete through right-clic
   await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('button', { name: /^Materials/ }).click();
   await page
-    .locator('input[type=file]')
+    .locator('input[type=file]:not([data-document-upload])')
     .first()
     .setInputFiles({ name: 'file.txt', mimeType: 'text/plain', buffer: Buffer.from('data') });
   await page.locator('.material-row').click({ button: 'right' });
